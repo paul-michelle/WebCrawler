@@ -1,15 +1,17 @@
 Reddit-scraper
 
-UNIQUE_ID; (uuid1() библиотеки uuid с параметром hex)
-post URL;
-username;
-user karma;
-user cake day;
-post karma;
-comment karma;
-post date;
-number of comments;
-number of votes;
-post category
+UNIQUE_ID; (uuid1() библиотеки uuid с параметром hex) +
+post URL; +
+username; +
+
+
+                        user karma; ()
+                        user cake day; ()
+                                                post karma; ? hover +
+                                                comment karma; ? hover +
+                                                post date; ? hover !!!
+number of comments; +
+number of votes; +
+post category +
 
 reddit-YYYYMMDDHHMM.txt
