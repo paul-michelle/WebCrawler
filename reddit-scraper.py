@@ -1,87 +1,151 @@
+import logging
+import dotenv
 import os
+import re
 import uuid
-from time import sleep
+from typing import Dict
 import requests
+from datetime import datetime, date, timedelta
+from time import sleep
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.common.exceptions \
+    import UnexpectedAlertPresentException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from dotenv import load_dotenv
-load_dotenv()
 
+dotenv.load_dotenv()
+
+PAGE_TO_SCRAPE = "https://www.reddit.com/top/?t=month"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"}
+WEBDRIVER_PATH = r"C:\Users\Pavel\Desktop\chromedriver.exe"
+TARGET_DIR_PATH = r"\\wsl$\Ubuntu-20.04\home\pavel\itechart\reddit-task"
 POSTS_FOR_PARSING_NUM = 100
-FAILED_SCRAPE_COEFF = 1,1
+FAILED_SCRAPE_COEFF = 1.5
 SCROLLING_ITERATIONS = 100
-SLEEPING_INBETWEEN_SCROLLING = 0.07
-
-# SCROLLING_ITERATIONS = 3
-# SLEEPING_INBETWEEN_SCROLLING = 0.07
-# POSTS_FOR_PARSING_LIMIT = 5
+SLEEPING_INBETWEEN_SCROLLING = 0.5
 
 options = Options()
 options.headless = True
 options.add_argument("--window-size=1920,1080")
-driver = webdriver.Chrome(r"C:\Users\Pavel\Desktop\chromedriver.exe")
-driver.get('https://www.reddit.com/r/all/top/?t=month')
-# ____logging in if necessary_______
-# login_button = driver.find_element(By.CLASS_NAME, '_2tU8R9NTqhvBrhoNAXWWcP')
-# login_button.click()
-# driver.switch_to.frame(driver.find_element(By.TAG_NAME, 'iframe'))
-# driver.find_element(By.ID, 'loginUsername').send_keys(os.getenv("REDDIT_LOGIN"))
-# driver.find_element(By.ID, 'loginPassword').send_keys(os.getenv("REDDIT_PASSWORD"))
-# driver.find_element(By.XPATH, '//button[@type="submit"]').click()
 
-scrollDown = "window.scrollBy(0,3000);"
-for i in range(SCROLLING_ITERATIONS):
-    sleep(SLEEPING_INBETWEEN_SCROLLING)
-    driver.execute_script(scrollDown)
-content = driver.page_source
-driver.quit()
-soup = BeautifulSoup(content, features="lxml")
+def scrape_data(webdriver_path: str = WEBDRIVER_PATH,
+                reddit_url: str = PAGE_TO_SCRAPE,
+                reddit_login: str = os.getenv("REDDIT_LOGIN"),
+                reddit_password: str = os.getenv("REDDIT_PASSWORD"),
+                posts_to_parse: int = POSTS_FOR_PARSING_NUM,
+                target_dir_path: str = TARGET_DIR_PATH
+                ) -> None:
 
-posts = soup.findAll('div', attrs={"class":"Post"},
-                     limit=POSTS_FOR_PARSING_NUM*FAILED_SCRAPE_COEFF)
-posts_dict = {}
-# while len(posts_dict) != POSTS_FOR_PARSING_NUM:
-for index, post in enumerate(posts):
-    unique_id = uuid.uuid1().hex
-    post_url = post.find('a', attrs={"class": "_3jOxDPIQ0KaOWpzvSQo-1s"})['href']
-    username = post.find('a', attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"}).contents[0].split("/")[1]
-    comments_num = post.find('span', attrs={"class": "FHCV02u6Cp2zYL0fhQPsO"}).contents[0].split()[0]
-    votes_num = post.find('div', attrs={"class": "_1rZYMD_4xY3gRcSS3p8ODO"}).contents[0]
-    category = post.find('div', attrs={"class": "_2mHuuvyV9doV3zwbZPtIPG"}).contents[0].contents[0].split("/")[1]
+    logging.basicConfig(filename=f'{target_dir_path}{os.sep}reddit-scraper.log', filemode='w', level=logging.INFO)
 
-    user_url = f'https://www.reddit.com/{post.find("a", attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"})["href"]}'
-    headers = {"User-Agent": "Mozilla/5.0 (X11; CrOS x86_64 8172.45.0)\
-                AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.64 Safari/537.36"
-               }
-    user_response = requests.get(user_url, headers=headers).content
-    user_soup = BeautifulSoup(user_response, features='lxml')
-    post_karma_span = user_soup.find('span', attrs={"class": "karma"})
-    if post_karma_span:
-        post_karma = post_karma_span.contents[0]
-    else:
-        post_karma = 'ignorepost'
-        continue
-    comment_karma_span = user_soup.find('span', attrs={"class": "comment-karma"})
-    comment_karma = comment_karma_span.contents[0]
+    # ____opening the webdriver and navigating to page _______
+    driver = webdriver.Chrome(webdriver_path)
+    try:
+        driver.get(reddit_url)
+        logging.info(f'WebDriver\'s navigating to the {reddit_url} '
+                     f'--- {datetime.now()}')
+    except WebDriverException:
+        logging.error('---Failed to connect. Check Internet connection and the URL.')
 
-    posts_dict[index] = [post_url, post_karma, comment_karma]
+    # ____logging in ____
+    login_button = driver.find_element(By.CLASS_NAME, '_2tU8R9NTqhvBrhoNAXWWcP')
+    login_button.click()
+    driver.switch_to.frame(driver.find_element(By.TAG_NAME, 'iframe'))
+    driver.find_element(By.ID, 'loginUsername').send_keys(reddit_login)
+    driver.find_element(By.ID, 'loginPassword').send_keys(reddit_password)
+    driver.find_element(By.XPATH, '//button[@type="submit"]').click()
 
-for key, value in posts_dict.items():
-    print(key,value)
+    logging.info(f'Loading dynamic content of the webpage {PAGE_TO_SCRAPE} '
+                 f'--- {datetime.now()}')
+    scrollDown = "window.scrollBy(0,3000);"
+    for i in range(SCROLLING_ITERATIONS):
+        try:
+            sleep(SLEEPING_INBETWEEN_SCROLLING)
+            driver.execute_script(scrollDown)
+        except UnexpectedAlertPresentException:
+            logging.error('An unexpected alert has appeared. An unexpected modal'
+                          'is probably blocking the webdriver from executing'
+                          'the scroll-down command')
+
+    logging.info(f'Loading of dynamic content finished --- {datetime.now()}')
+    content = driver.page_source
+    driver.quit()
+
+    soup = BeautifulSoup(content, features="lxml")
+    posts = soup.findAll('div', attrs={"class": "Post"},
+                         limit=posts_to_parse * FAILED_SCRAPE_COEFF)
+    posts_dict: Dict[int, str] = {}
+
+    logging.info(f'Starting to scrape content --- {datetime.now()}')
+    for index, post in enumerate(posts):
+
+        unique_id = uuid.uuid1().hex
+        post_url = post.find('a', attrs={"class": "_3jOxDPIQ0KaOWpzvSQo-1s"})['href']
+        post_date = str(date.today() - timedelta(days=
+                    int(post.find('a', attrs={"class": "_3jOxDPIQ0KaOWpzvSQo-1s"}).contents[0].split()[0])))
+        username = post.find('a', attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"}).contents[0].split("/")[1]
+
+        comments_num_span = post.find('span', attrs={"class": "FHCV02u6Cp2zYL0fhQPsO"})
+        if comments_num_span.find('span', attrs={"class": "D6SuXeSnAAagG8dKAb4O4"}):
+            comments_num = comments_num_span.find('span', attrs={"class": "D6SuXeSnAAagG8dKAb4O4"}).contents[0]
+        else:
+            comments_num = comments_num_span.contents[0].split()[0]
 
 
+        votes_num = post.find('div', attrs={"class": "_1rZYMD_4xY3gRcSS3p8ODO"}).contents[0]
+        category = post.find('div', attrs={"class": "_2mHuuvyV9doV3zwbZPtIPG"}).contents[0].contents[0].split("/")[1]
 
+        user_url = f'https://www.reddit.com{post.find("a", attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"})["href"]}'
+        user_response = requests.get(user_url, headers=HEADERS).content
+        user_soup = BeautifulSoup(user_response, features='lxml')
+        user_profile_card = user_soup.find("span", attrs={"id": "profile--id-card--highlight-tooltip--cakeday"})
+        if user_profile_card:
+            user_cakeday = user_profile_card.contents[0]
+        else:
+            logging.warning(f'Failed to reach user\'s {username} page, hence ignoring the post #{index + 1}')
+            continue
+        karma_section = user_soup.find("script", attrs={"id": "data"})
+        comment_karma = re.search('"fromComments":[\d]*', str(karma_section)).group().split(':')[1]
+        post_karma = re.search('"fromPosts":[\d]*', str(karma_section)).group().split(':')[1]
+        user_karma = re.search('"total":[\d]*', str(karma_section)).group().split(':')[1]
 
+        posts_dict[index] = ';'.join([unique_id,
+                                          post_url,
+                                          username,
+                                          user_karma,
+                                          user_cakeday,
+                                          post_karma,
+                                          comment_karma,
+                                          post_date,
+                                          comments_num,
+                                          votes_num,
+                                          category])
 
+        if len(posts_dict) == POSTS_FOR_PARSING_NUM:
+            break
 
+    logging.info(f'Scraping finished. Collected valid data on {len(posts_dict)}'
+                 f' posts --- {datetime.now()}')
 
+    old_file = re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(target_dir_path)))
+    if old_file:
+        os.remove(old_file.group())
+    new_file = f'{target_dir_path}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
 
+    logging.info(f'Starting to write info file {new_file} --- {datetime.now()}')
+    try:
+        with open(new_file, 'w') as file:
+            for value in posts_dict.values():
+                file.write(f"{value}\n")
+    except OSError:
+        logging.error('Unable to write scraped data into the file')
 
+    logging.info(f'Writing completed --- {datetime.now()}')
 
-
-
+if __name__ == '__main__':
+    scrape_data()
 
 
 

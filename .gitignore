@@ -1,7 +1,3 @@
-.env
 virt-env-reddit/
 .idea/
-some_snippets.py
-task.txt
-user_html.html
-post.html
+.env
