@@ -1,4 +1,5 @@
 import logging
+import time
 import dotenv
 import os
 import re
@@ -23,12 +24,13 @@ WEBDRIVER_PATH = r"C:\Users\Pavel\Desktop\chromedriver.exe"
 TARGET_DIR_PATH = r"\\wsl$\Ubuntu-20.04\home\pavel\itechart\reddit-task"
 POSTS_FOR_PARSING_NUM = 100
 FAILED_SCRAPE_COEFF = 1.5
-SCROLLING_ITERATIONS = 100
 SLEEPING_INBETWEEN_SCROLLING = 0.5
+MAX_WAIT_TIME = 60
 
 options = Options()
 options.headless = True
 options.add_argument("--window-size=1920,1080")
+
 
 def scrape_data(webdriver_path: str = WEBDRIVER_PATH,
                 reddit_url: str = PAGE_TO_SCRAPE,
@@ -49,7 +51,7 @@ def scrape_data(webdriver_path: str = WEBDRIVER_PATH,
     except WebDriverException:
         logging.error('---Failed to connect. Check Internet connection and the URL.')
 
-    # ____logging in ____
+    # ____logging in____
     login_button = driver.find_element(By.CLASS_NAME, '_2tU8R9NTqhvBrhoNAXWWcP')
     login_button.click()
     driver.switch_to.frame(driver.find_element(By.TAG_NAME, 'iframe'))
@@ -57,28 +59,35 @@ def scrape_data(webdriver_path: str = WEBDRIVER_PATH,
     driver.find_element(By.ID, 'loginPassword').send_keys(reddit_password)
     driver.find_element(By.XPATH, '//button[@type="submit"]').click()
 
+    #____loading dynamic content within the given MAX_WAIT_TIME____
     logging.info(f'Loading dynamic content of the webpage {PAGE_TO_SCRAPE} '
                  f'--- {datetime.now()}')
-    scrollDown = "window.scrollBy(0,3000);"
-    for i in range(SCROLLING_ITERATIONS):
+    start_time = time.time()
+    while True:
+        scroll_down = "window.scrollBy(0,3000);"
+
         try:
             sleep(SLEEPING_INBETWEEN_SCROLLING)
-            driver.execute_script(scrollDown)
+            driver.execute_script(scroll_down)
         except UnexpectedAlertPresentException:
             logging.error('An unexpected alert has appeared. An unexpected modal'
                           'is probably blocking the webdriver from executing'
                           'the scroll-down command')
-
+        content = driver.page_source
+        soup = BeautifulSoup(content, features="lxml")
+        posts = soup.findAll('div', attrs={"class": "Post"})
+        time_spent = time.time() - start_time
+        if len(posts) == posts_to_parse * FAILED_SCRAPE_COEFF:
+            break
+        if time_spent > MAX_WAIT_TIME:
+            logging.warning(f'Max waiting time exceeded. Collected data on {len(posts)}')
+            break
     logging.info(f'Loading of dynamic content finished --- {datetime.now()}')
-    content = driver.page_source
     driver.quit()
 
-    soup = BeautifulSoup(content, features="lxml")
-    posts = soup.findAll('div', attrs={"class": "Post"},
-                         limit=posts_to_parse * FAILED_SCRAPE_COEFF)
-    posts_dict: Dict[int, str] = {}
-
+    #____Collecting the necessary items from the soup____
     logging.info(f'Starting to scrape content --- {datetime.now()}')
+    posts_dict: Dict[int, str] = {}
     for index, post in enumerate(posts):
 
         unique_id = uuid.uuid1().hex
@@ -101,6 +110,7 @@ def scrape_data(webdriver_path: str = WEBDRIVER_PATH,
         user_response = requests.get(user_url, headers=HEADERS).content
         user_soup = BeautifulSoup(user_response, features='lxml')
         user_profile_card = user_soup.find("span", attrs={"id": "profile--id-card--highlight-tooltip--cakeday"})
+        #____Checking if user personal page is available and does not need age confirmation____
         if user_profile_card:
             user_cakeday = user_profile_card.contents[0]
         else:
@@ -110,30 +120,21 @@ def scrape_data(webdriver_path: str = WEBDRIVER_PATH,
         comment_karma = re.search('"fromComments":[\d]*', str(karma_section)).group().split(':')[1]
         post_karma = re.search('"fromPosts":[\d]*', str(karma_section)).group().split(':')[1]
         user_karma = re.search('"total":[\d]*', str(karma_section)).group().split(':')[1]
-
-        posts_dict[index] = ';'.join([unique_id,
-                                          post_url,
-                                          username,
-                                          user_karma,
-                                          user_cakeday,
-                                          post_karma,
-                                          comment_karma,
-                                          post_date,
-                                          comments_num,
-                                          votes_num,
-                                          category])
-
+        #____Writing the data into a dictionary with the given number of posts limitation____
+        posts_dict[index] = ';'.join([unique_id, post_url, username, user_karma, user_cakeday, post_karma,
+                                comment_karma, post_date, comments_num, votes_num, category])
         if len(posts_dict) == POSTS_FOR_PARSING_NUM:
             break
-
     logging.info(f'Scraping finished. Collected valid data on {len(posts_dict)}'
                  f' posts --- {datetime.now()}')
 
+    #____Recreating the txt-file according to the 'reddit-YYYYMMDDHHMM.txt format____
     old_file = re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(target_dir_path)))
     if old_file:
         os.remove(old_file.group())
     new_file = f'{target_dir_path}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
 
+    #____Writing the collected data into newly created txt-file____
     logging.info(f'Starting to write info file {new_file} --- {datetime.now()}')
     try:
         with open(new_file, 'w') as file:
@@ -141,8 +142,9 @@ def scrape_data(webdriver_path: str = WEBDRIVER_PATH,
                 file.write(f"{value}\n")
     except OSError:
         logging.error('Unable to write scraped data into the file')
-
     logging.info(f'Writing completed --- {datetime.now()}')
+
+    return None
 
 if __name__ == '__main__':
     scrape_data()
