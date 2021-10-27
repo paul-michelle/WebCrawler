@@ -19,12 +19,16 @@ from selenium.webdriver.common.by import By
 
 dotenv.load_dotenv()
 
-PAGE_TO_SCRAPE = "https://www.reddit.com/top/?t=month"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"}
-WEBDRIVER_PATH = r"C:\Users\Pavel\Desktop\chromedriver.exe"
-TARGET_DIR_PATH = r"\\wsl$\Ubuntu-20.04\home\pavel\itechart\reddit-task"
+
+PAGE_TO_SCRAPE = "https://www.reddit.com/top/?t=month"
+REDDIT_LOGIN =os.getenv("REDDIT_LOGIN")
+REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
+WEBDRIVER_PATH = os.getenv("WEBDRIVER_PATH")
+TARGET_DIR_PATH = os.getenv("TARGET_DIR_PATH")
 POSTS_FOR_PARSING_NUM = 100
+
 FAILED_SCRAPE_COEFF = 1.5
 SLEEPING_INBETWEEN_SCROLLING = 0.5
 MAX_WAIT_TIME = 60
@@ -52,8 +56,8 @@ class Loader:
         login_button = self.driver.find_element(By.CLASS_NAME, '_2tU8R9NTqhvBrhoNAXWWcP')
         login_button.click()
         self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, 'iframe'))
-        self.driver.find_element(By.ID, 'loginUsername').send_keys(os.getenv("REDDIT_LOGIN"))
-        self.driver.find_element(By.ID, 'loginPassword').send_keys(os.getenv("REDDIT_PASSWORD"))
+        self.driver.find_element(By.ID, 'loginUsername').send_keys(REDDIT_LOGIN)
+        self.driver.find_element(By.ID, 'loginPassword').send_keys(REDDIT_PASSWORD)
         self.driver.find_element(By.XPATH, '//button[@type="submit"]').click()
 
         logging.info(f'Loading dynamic content of the webpage {PAGE_TO_SCRAPE} '
@@ -198,14 +202,14 @@ class TextFileSaver(Saver):
             os.remove(old_file.group())
         new_file = f'{TARGET_DIR_PATH}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
 
-        logging.info(f'Starting to write info file {new_file} --- {datetime.now()}')
+        logging.info(f'Starting to write into file {new_file} --- {datetime.now()}')
         try:
             with open(new_file, 'w') as file:
                 for item in self.data:
                         file.write(f"{item}\n")
         except OSError:
             logging.error('Unable to write scraped data into the file')
-        logging.info(f'Writing completed --- {datetime.now()}')
+        logging.info(f'Writing to file completed --- {datetime.now()}')
 
 
 def main() -> None:
@@ -218,6 +222,8 @@ def main() -> None:
         data = scraper.get_all_info()
         collector.collect(data)
         if len(collector.valid_data) == POSTS_FOR_PARSING_NUM:
+            logging.info(f'Scraped valid data on {POSTS_FOR_PARSING_NUM} '
+                         f'posts --- {datetime.now()}')
             break
 
     data_to_save = collector.give_data()
