@@ -23,14 +23,14 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"}
 
 PAGE_TO_SCRAPE = "https://www.reddit.com/top/?t=month"
-REDDIT_LOGIN =os.getenv("REDDIT_LOGIN")
+REDDIT_LOGIN = os.getenv("REDDIT_LOGIN")
 REDDIT_PASSWORD = os.getenv("REDDIT_PASSWORD")
 WEBDRIVER_PATH = os.getenv("WEBDRIVER_PATH")
 TARGET_DIR_PATH = os.getenv("TARGET_DIR_PATH")
 POSTS_FOR_PARSING_NUM = 100
 
 FAILED_SCRAPE_COEFF = 1.5
-SLEEPING_INBETWEEN_SCROLLING = 0.5
+SLEEPING_INBETWEEN_SCROLLING = 1
 MAX_WAIT_TIME = 60
 
 logging.basicConfig(filename=f'{TARGET_DIR_PATH}{os.sep}reddit-scraper.log', filemode='w', level=logging.INFO)
@@ -58,7 +58,9 @@ class Loader:
         self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, 'iframe'))
         self.driver.find_element(By.ID, 'loginUsername').send_keys(REDDIT_LOGIN)
         self.driver.find_element(By.ID, 'loginPassword').send_keys(REDDIT_PASSWORD)
-        self.driver.find_element(By.XPATH, '//button[@type="submit"]').click()
+        # sleep(3)
+        submit_button = self.driver.find_element(By.TAG_NAME, 'button')
+        submit_button.click()
 
         logging.info(f'Loading dynamic content of the webpage {PAGE_TO_SCRAPE} '
                      f'--- {datetime.now()}')
@@ -76,7 +78,7 @@ class Loader:
             soup = BeautifulSoup(content, features="lxml")
             posts = soup.findAll('div', attrs={"class": "Post"})
             time_spent = time.time() - start_time
-            if len(posts) == posts_to_parse * FAILED_SCRAPE_COEFF:
+            if len(posts) > posts_to_parse * FAILED_SCRAPE_COEFF:
                 break
             if time_spent > MAX_WAIT_TIME:
                 logging.warning(f'Max waiting time exceeded. Collected data on {len(posts)}')
@@ -206,7 +208,7 @@ class TextFileSaver(Saver):
         try:
             with open(new_file, 'w') as file:
                 for item in self.data:
-                        file.write(f"{item}\n")
+                    file.write(f"{item}\n")
         except OSError:
             logging.error('Unable to write scraped data into the file')
         logging.info(f'Writing to file completed --- {datetime.now()}')

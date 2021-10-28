@@ -1,32 +1,35 @@
-INFO:root:WebDriver's navigating to the https://www.reddit.com/top/?t=month --- 2021-10-26 21:38:08.743478
-INFO:root:Loading dynamic content of the webpage https://www.reddit.com/top/?t=month --- 2021-10-26 21:38:10.425646
-INFO:root:Loading of dynamic content finished --- 2021-10-26 21:38:51.470617
+INFO:root:WebDriver's navigating to the https://www.reddit.com/top/?t=month --- 2021-10-28 14:37:32.065828
+INFO:root:Loading dynamic content of the webpage https://www.reddit.com/top/?t=month --- 2021-10-28 14:37:34.031546
+INFO:root:Loading of dynamic content finished --- 2021-10-28 14:38:28.437415
 WARNING:root:Failed to reach user's frenzzzykid page
 WARNING:root:Failed to reach user's johnmory page
 WARNING:root:Failed to reach user's [deleted] page
 WARNING:root:Failed to reach user's rHaris page
-WARNING:root:Failed to reach user's adamamericana page
+WARNING:root:Failed to reach user's aquacakra page
 WARNING:root:Failed to reach user's deepfriedpickle_yes page
+WARNING:root:Failed to reach user's ImpossibleJump765 page
+WARNING:root:Failed to reach user's Snazzy786 page
 WARNING:root:Failed to reach user's SnooCookies7311 page
 WARNING:root:Failed to reach user's bballkj7 page
 WARNING:root:Failed to reach user's Sayl0 page
 WARNING:root:Failed to reach user's DeificClusterfuck page
-WARNING:root:Failed to reach user's ImpossibleJump765 page
+WARNING:root:Failed to reach user's momsdodo747 page
 WARNING:root:Failed to reach user's MousseSuspicious930 page
 WARNING:root:Failed to reach user's TestSubject5kk page
 WARNING:root:Failed to reach user's [deleted] page
 WARNING:root:Failed to reach user's Cagedwar page
 WARNING:root:Failed to reach user's [deleted] page
 WARNING:root:Failed to reach user's Throwawaylism page
-WARNING:root:Failed to reach user's AshDarkana page
+WARNING:root:Failed to reach user's [deleted] page
+WARNING:root:Failed to reach user's momsdodo747 page
 WARNING:root:Failed to reach user's Throwawaylism page
 WARNING:root:Failed to reach user's 1poundbookingfee page
-WARNING:root:Failed to reach user's momsdodo747 page
-WARNING:root:Failed to reach user's werdmouf page
+WARNING:root:Failed to reach user's ZombieBisque page
+WARNING:root:Failed to reach user's Heterozygoats page
 WARNING:root:Failed to reach user's syngedsyringe page
+WARNING:root:Failed to reach user's werdmouf page
 WARNING:root:Failed to reach user's vincethewillnill page
 WARNING:root:Failed to reach user's 42words page
-WARNING:root:Failed to reach user's donerkebabish page
-WARNING:root:Failed to reach user's Lord-Wombat page
-INFO:root:Starting to write info file \\wsl$\Ubuntu-20.04\home\pavel\itechart\reddit-task\reddit-202110262207.txt --- 2021-10-26 22:07:15.700473
-INFO:root:Writing completed --- 2021-10-26 22:07:15.703474
+INFO:root:Scraped valid data on 100 posts --- 2021-10-28 15:04:41.958160
+INFO:root:Starting to write into file /home/paul-michelle/PythonProjects/reddit-sraper/itechart-lab/reddit-202110281504.txt --- 2021-10-28 15:04:41.965773
+INFO:root:Writing to file completed --- 2021-10-28 15:04:41.965950
