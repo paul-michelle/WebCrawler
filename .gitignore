@@ -1,5 +1,7 @@
 reddit-virtenv
+.env
 *.pyc
 .idea/
-.env
 chromedriver
+snippets.py
+tests.py

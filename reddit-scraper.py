@@ -6,7 +6,6 @@ import os
 import re
 import uuid
 from typing import Union, List
-import requests
 from datetime import datetime, date, timedelta
 from time import sleep
 import bs4
@@ -15,7 +14,8 @@ from selenium import webdriver
 from selenium.common.exceptions \
     import UnexpectedAlertPresentException, WebDriverException
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+import asyncio
+from aiohttp import ClientSession
 
 dotenv.load_dotenv()
 
@@ -53,18 +53,10 @@ class Loader:
         except WebDriverException:
             logging.error('---Failed to connect. Check Internet connection and the URL.')
 
-        login_button = self.driver.find_element(By.CLASS_NAME, '_2tU8R9NTqhvBrhoNAXWWcP')
-        login_button.click()
-        self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, 'iframe'))
-        self.driver.find_element(By.ID, 'loginUsername').send_keys(REDDIT_LOGIN)
-        self.driver.find_element(By.ID, 'loginPassword').send_keys(REDDIT_PASSWORD)
-        # sleep(3)
-        submit_button = self.driver.find_element(By.TAG_NAME, 'button')
-        submit_button.click()
-
         logging.info(f'Loading dynamic content of the webpage {PAGE_TO_SCRAPE} '
                      f'--- {datetime.now()}')
         start_time = time.time()
+
         while True:
             scroll_down = "window.scrollBy(0,3000);"
             try:
@@ -79,11 +71,14 @@ class Loader:
             posts = soup.findAll('div', attrs={"class": "Post"})
             time_spent = time.time() - start_time
             if len(posts) > posts_to_parse * FAILED_SCRAPE_COEFF:
+                logging.info(f'Loading of dynamic content finished --- {datetime.now()}.'
+                             f'Collected data on {len(posts)} for {time_spent} seconds.')
                 break
             if time_spent > MAX_WAIT_TIME:
-                logging.warning(f'Max waiting time exceeded. Collected data on {len(posts)}')
+                logging.warning(f'Max waiting time exceeded. Collected data on {len(posts)} '
+                                f'for {MAX_WAIT_TIME} seconds.')
                 break
-        logging.info(f'Loading of dynamic content finished --- {datetime.now()}')
+
         self.driver.quit()
         return posts
 
@@ -93,145 +88,168 @@ class Scraper:
     def __init__(self, post):
         self.post = post
 
-    def get_unique_id(self) -> str:
+    async def get_unique_id(self) -> str:
         return uuid.uuid1().hex
 
-    def get_post_url(self) -> str:
+    async def get_post_url(self) -> str:
         return self.post.find('a', attrs={"class": "_3jOxDPIQ0KaOWpzvSQo-1s"})['href']
 
-    def get_post_date(self) -> str:
+    async def get_post_date(self) -> str:
         published_days_ago = int(self.post.find('a', attrs={"class": "_3jOxDPIQ0KaOWpzvSQo-1s"}).contents[0].split()[0])
         post_date = date.today() - timedelta(days=published_days_ago)
         return str(post_date)
 
-    def get_user_name(self) -> str:
+    async def get_user_name(self) -> str:
         return self.post.find('a', attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"}).contents[0].split("/")[1]
 
-    def get_comments_number(self) -> str:
+    async def get_comments_number(self) -> str:
         comments_num_span = self.post.find("span", attrs={"class": "FHCV02u6Cp2zYL0fhQPsO"})
         comments_num_nested_span = comments_num_span.find("span", attrs={"class": "D6SuXeSnAAagG8dKAb4O4"})
         if not comments_num_nested_span:
             return comments_num_span.contents[0].split()[0]
         return comments_num_nested_span.contents[0]
 
-    def get_votes_number(self) -> str:
+    async def get_votes_number(self) -> str:
         return self.post.find('div', attrs={"class": "_1rZYMD_4xY3gRcSS3p8ODO"}).contents[0]
 
-    def get_post_category(self) -> str:
+    async def get_post_category(self) -> str:
         return self.post.find('div', attrs={"class": "_2mHuuvyV9doV3zwbZPtIPG"}).contents[0].contents[0].split("/")[1]
 
-    def __get_user_profile_soup(self) -> bs4.BeautifulSoup:
+    async def __get_user_profile_soup(self) -> bs4.BeautifulSoup:
         user_url = f'https://www.reddit.com{self.post.find("a", attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"})["href"]}'
-        user_response = requests.get(user_url, headers=HEADERS).content
-        return BeautifulSoup(user_response, features='lxml')
+        async with ClientSession(headers=HEADERS) as session:
+            user_response = await session.request(method="GET", url=user_url)
+            html = await user_response.read()
+        return BeautifulSoup(html, features='lxml')
 
-    def __get_user_profile_card(self) -> str:
-        return self.__get_user_profile_soup().find("span", attrs={"id": "profile--id-card--highlight-tooltip--cakeday"})
+    async def __get_user_profile_card(self) -> str:
+        user_profile = await self.__get_user_profile_soup()
+        return user_profile.find("span", attrs={"id": "profile--id-card--highlight-tooltip--cakeday"})
 
-    def get_user_cakeday(self) -> Union[str, None]:
-        if not self.__get_user_profile_card():
-            logging.warning(f'Failed to reach user\'s {self.get_user_name()} page')
-            return
-        return self.__get_user_profile_card().contents[0]
+    async def get_user_cakeday(self) -> Union[str, None]:
+        card_available = await self.__get_user_profile_card()
+        if card_available:
+            return card_available.contents[0]
+        logging.warning(f'Failed to reach page https://www.reddit.com'
+                            f'{self.post.find("a", attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"})["href"]}')
 
-    def __get_user_karma_section(self) -> str:
-        return self.__get_user_profile_soup().find("script", attrs={"id": "data"})
+    async def __get_user_karma_section(self) -> str:
+        user_profile = await self.__get_user_profile_soup()
+        return user_profile.find("script", attrs={"id": "data"})
 
-    def get_user_post_karma(self) -> Union[str, None]:
-        post_karma_match = re.search('"fromPosts":[\d]*', str(self.__get_user_karma_section()))
-        if not post_karma_match:
-            return
-        return post_karma_match.group().split(':')[1]
+    async def get_user_post_karma(self) -> Union[str, None]:
+        karma_section_block = await self.__get_user_karma_section()
+        post_karma_match = re.search('"fromPosts":[\d]*', str(karma_section_block))
+        if post_karma_match:
+            return post_karma_match.group().split(':')[1]
 
-    def get_user_comment_karma(self) -> Union[str, None]:
-        comment_karma_match = re.search('"fromComments":[\d]*', str(self.__get_user_karma_section()))
-        if not comment_karma_match:
-            return
-        return comment_karma_match.group().split(':')[1]
+    async def get_user_comment_karma(self) -> Union[str, None]:
+        karma_section_block = await self.__get_user_karma_section()
+        comment_karma_match = re.search('"fromComments":[\d]*', str(karma_section_block))
+        if comment_karma_match:
+            return comment_karma_match.group().split(':')[1]
 
-    def get_user_total_karma(self) -> Union[str, None]:
-        total_karma_match = re.search('"total":[\d]*', str(self.__get_user_karma_section()))
-        if not total_karma_match:
-            return
-        return total_karma_match.group().split(':')[1]
+    async def get_user_total_karma(self) -> Union[str, None]:
+        karma_section_block = await self.__get_user_karma_section()
+        total_karma_match = re.search('"total":[\d]*', str(karma_section_block))
+        if total_karma_match:
+            return total_karma_match.group().split(':')[1]
 
-    def get_all_info(self) -> Union[str, None]:
+    async def get_all_info(self) -> Union[str, None]:
 
-        all_info = [self.get_unique_id(),
-                    self.get_post_url(),
-                    self.get_user_name(),
-                    self.get_user_comment_karma(),
-                    self.get_user_post_karma(),
-                    self.get_user_total_karma(),
-                    self.get_user_cakeday(),
-                    self.get_post_date(),
-                    self.get_comments_number(),
-                    self.get_votes_number(),
-                    self.get_post_category()]
+        unique_id = self.get_unique_id()
+        post_url = self.get_post_url()
+        user_name = self.get_user_name()
+        comment_karma = self.get_user_comment_karma()
+        post_karma = self.get_user_post_karma()
+        total_karma = self.get_user_total_karma()
+        user_cakeday = self.get_user_cakeday()
+        post_date = self.get_post_date()
+        comments_number = self.get_comments_number()
+        votes_number = self.get_votes_number()
+        post_category = self.get_post_category()
 
-        if all(all_info):
-            return ';'.join(all_info)
-        return
+        all_info_tuple = await asyncio.gather(unique_id, post_url, user_name, comment_karma, post_karma, total_karma,
+                                              user_cakeday, post_date, comments_number, votes_number, post_category)
+
+        if all(all_info_tuple):
+            return ';'.join(all_info_tuple)
 
 
 class ValidDataCollector:
 
-    valid_data = []
+    def __init__(self):
+        self.__valid_data = []
 
     def collect(self, data) -> None:
         if data is not None:
-            self.valid_data.append(data)
+            self.__valid_data.append(data)
 
-    def give_data(self) -> List:
-        return self.valid_data
+    @property
+    def data_length(self) -> int:
+        return len(self.__valid_data)
+
+    @property
+    def data(self) -> List:
+        return self.__valid_data
 
 
 class Saver(ABC):
     @abstractmethod
-    def save(self):
+    def save(self) -> None:
         pass
 
 
 class TextFileSaver(Saver):
 
-    def __init__(self, data):
-        self.data = data
+    def __init__(self):
+        self.__data = None
+
+    def set_data(self, data) -> None:
+        self.__data = data
+
+    @staticmethod
+    def remove_old_file() -> None:
+        old_file = re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(TARGET_DIR_PATH)))
+        if old_file:
+            logging.info(f'Deleting previous file {old_file.group()} --- {datetime.now()}')
+            os.remove(old_file.group())
+
+    @staticmethod
+    def calculate_filename() -> str:
+        return f'{TARGET_DIR_PATH}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
 
     def save(self) -> None:
 
-        old_file = re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(TARGET_DIR_PATH)))
-        if old_file:
-            os.remove(old_file.group())
-        new_file = f'{TARGET_DIR_PATH}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
-
-        logging.info(f'Starting to write into file {new_file} --- {datetime.now()}')
+        new_filename = self.calculate_filename()
+        logging.info(f'Starting to write into file --- {datetime.now()}')
         try:
-            with open(new_file, 'w') as file:
-                for item in self.data:
+            with open(new_filename, 'w') as file:
+                for item in self.__data:
                     file.write(f"{item}\n")
         except OSError:
             logging.error('Unable to write scraped data into the file')
         logging.info(f'Writing to file completed --- {datetime.now()}')
 
 
-def main() -> None:
+async def main() -> None:
 
     loader = Loader()
     collector = ValidDataCollector()
+    saver = TextFileSaver()
 
-    for post in loader.load_posts():
-        scraper = Scraper(post)
-        data = scraper.get_all_info()
-        collector.collect(data)
-        if len(collector.valid_data) == POSTS_FOR_PARSING_NUM:
-            logging.info(f'Scraped valid data on {POSTS_FOR_PARSING_NUM} '
-                         f'posts --- {datetime.now()}')
+    posts_to_process = loader.load_posts()
+    results = await asyncio.gather(*(Scraper(post).get_all_info() for post in posts_to_process))
+    for result in results:
+        collector.collect(result)
+        if collector.data_length == POSTS_FOR_PARSING_NUM:
             break
 
-    data_to_save = collector.give_data()
-    saver = TextFileSaver(data_to_save)
+    data_to_save = collector.data
+    saver.set_data(data_to_save)
+    saver.remove_old_file()
     saver.save()
 
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
