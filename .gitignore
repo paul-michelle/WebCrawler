@@ -4,4 +4,8 @@ reddit-virtenv
 .idea/
 chromedriver
 reddit-*.txt
+reddit-*.log
 output_files/
+
+README.md
+utils.py

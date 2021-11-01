@@ -1,15 +1,13 @@
-import settings
 from typing import List
-
-POSTS_FOR_PARSING_NUM = settings.POSTS_FOR_PARSING_NUM
 
 
 class ValidDataCollector:
 
-    def __init__(self):
+    def __init__(self, posts_for_parsing_num) -> None:
+        self.posts_for_parsing_num = posts_for_parsing_num
         self.__valid_data = []
 
-    def collect(self, data) -> None:
+    def collect(self, data: str) -> None:
         if data is not None and data not in self.__valid_data:
             self.__valid_data.append(data)
 
@@ -22,5 +20,5 @@ class ValidDataCollector:
         return self.__valid_data
 
     @property
-    def collector_filled(self):
-        return self.data_length == POSTS_FOR_PARSING_NUM
+    def collector_filled(self) -> bool:
+        return self.data_length == self.posts_for_parsing_num

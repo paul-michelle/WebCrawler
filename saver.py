@@ -1,12 +1,8 @@
 import os
 import re
 import logging
-import settings
 from datetime import datetime
 from abc import ABC, abstractmethod
-
-TARGET_DIR_PATH = settings.TARGET_DIR_PATH
-logging.basicConfig(filename=f'{TARGET_DIR_PATH}{os.sep}reddit-scraper.log', filemode='w', level=logging.INFO)
 
 
 class Saver(ABC):
@@ -17,22 +13,21 @@ class Saver(ABC):
 
 class TextFileSaver(Saver):
 
-    def __init__(self):
+    def __init__(self, target_dir_path) -> None:
+        self.__target_dir_path = target_dir_path
         self.__data = None
 
     def set_data(self, data) -> None:
         self.__data = data
 
-    @staticmethod
-    def remove_old_file() -> None:
-        old_file = re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(TARGET_DIR_PATH)))
-        if old_file:
-            logging.info(f'Deleting previous file {old_file.group()} --- {datetime.now()}')
-            os.remove(old_file.group())
+    def remove_old_file(self) -> None:
+        old_file_exists = re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(self.__target_dir_path)))
+        if old_file_exists:
+            logging.info(f'Deleting previous file named {old_file_exists.group()} --- {datetime.now()}')
+            os.remove(f'{self.__target_dir_path}{os.sep}{old_file_exists.group()}')
 
-    @staticmethod
-    def calculate_filename() -> str:
-        return f'{TARGET_DIR_PATH}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
+    def calculate_filename(self) -> str:
+        return f'{self.__target_dir_path}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
 
     def save(self) -> None:
 

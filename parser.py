@@ -1,6 +1,5 @@
 import settings
 import re
-import os
 import uuid
 import logging
 import asyncio
@@ -8,15 +7,15 @@ from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 from typing import Union
 from datetime import date, timedelta
+from constants import *
 
 HEADERS = settings.HEADERS
 TARGET_DIR_PATH = settings.TARGET_DIR_PATH
-logging.basicConfig(filename=f'{TARGET_DIR_PATH}{os.sep}reddit-scraper.log', filemode='w', level=logging.INFO)
 
 
 class Parser:
 
-    def __init__(self, post):
+    def __init__(self, post) -> None:
         self.post = post
 
     @staticmethod
@@ -24,31 +23,31 @@ class Parser:
         return uuid.uuid1().hex
 
     async def get_post_url(self) -> str:
-        return self.post.find('a', attrs={"class": "_3jOxDPIQ0KaOWpzvSQo-1s"})['href']
+        return self.post.find(POST_URL["elem"], attrs=POST_URL["attrs"])['href']
 
     async def get_post_date(self) -> str:
-        published_days_ago = int(self.post.find('a', attrs={"class": "_3jOxDPIQ0KaOWpzvSQo-1s"}).contents[0].split()[0])
+        published_days_ago = int(self.post.find(POST_DATE["elem"], attrs=POST_DATE["attrs"]).contents[0].split()[0])
         post_date = date.today() - timedelta(days=published_days_ago)
         return str(post_date)
 
     async def get_user_name(self) -> str:
-        return self.post.find('a', attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"}).contents[0].split("/")[1]
+        return self.post.find(USER_NAME["elem"], attrs=USER_NAME["attrs"]).contents[0].split("/")[1]
 
     async def get_comments_number(self) -> str:
-        comments_num_span = self.post.find("span", attrs={"class": "FHCV02u6Cp2zYL0fhQPsO"})
-        comments_num_nested_span = comments_num_span.find("span", attrs={"class": "D6SuXeSnAAagG8dKAb4O4"})
+        comments_num_span = self.post.find(COMMENTS["elem"], attrs=COMMENTS["attrs"])
+        comments_num_nested_span = comments_num_span.find(COMMENTS["elem"], attrs=COMMENTS["nested_attrs"])
         if not comments_num_nested_span:
             return comments_num_span.contents[0].split()[0]
         return comments_num_nested_span.contents[0]
 
     async def get_votes_number(self) -> str:
-        return self.post.find('div', attrs={"class": "_1rZYMD_4xY3gRcSS3p8ODO"}).contents[0]
+        return self.post.find(VOTES["elem"], attrs=VOTES["attrs"]).contents[0]
 
     async def get_post_category(self) -> str:
-        return self.post.find('div', attrs={"class": "_2mHuuvyV9doV3zwbZPtIPG"}).contents[0].contents[0].split("/")[1]
+        return self.post.find(CATEGORY["elem"], attrs=CATEGORY["attrs"]).contents[0].contents[0].split("/")[1]
 
     async def __get_user_profile_soup(self) -> BeautifulSoup:
-        user_url = f'https://www.reddit.com{self.post.find("a", attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"})["href"]}'
+        user_url = f'https://www.reddit.com{self.post.find(USER_NAME["elem"], attrs=USER_NAME["attrs"])["href"]}'
         async with ClientSession(headers=HEADERS) as session:
             user_response = await session.request(method="GET", url=user_url)
             html = await user_response.read()
@@ -56,34 +55,34 @@ class Parser:
 
     async def __get_user_profile_card(self) -> str:
         user_profile = await self.__get_user_profile_soup()
-        return user_profile.find("span", attrs={"id": "profile--id-card--highlight-tooltip--cakeday"})
+        return user_profile.find(CAKEDAY["elem"], attrs=CAKEDAY["attrs"])
 
     async def get_user_cakeday(self) -> Union[str, None]:
         card_available = await self.__get_user_profile_card()
         if card_available:
             return card_available.contents[0]
         logging.warning(f'Failed to reach page https://www.reddit.com'
-                        f'{self.post.find("a", attrs={"class": "_2tbHP6ZydRpjI44J3syuqC"})["href"]}')
+                        f'{self.post.find(USER_NAME["elem"], attrs=USER_NAME["attrs"])["href"]}')
 
     async def __get_user_karma_section(self) -> str:
         user_profile = await self.__get_user_profile_soup()
-        return user_profile.find("script", attrs={"id": "data"})
+        return user_profile.find(KARMA["elem"], attrs=KARMA["attrs"])
 
     async def get_user_post_karma(self) -> Union[str, None]:
         karma_section_block = await self.__get_user_karma_section()
-        post_karma_match = re.search(r'"fromPosts":[\d]*', str(karma_section_block))
+        post_karma_match = re.search(KARMA["post"], str(karma_section_block))
         if post_karma_match:
             return post_karma_match.group().split(':')[1]
 
     async def get_user_comment_karma(self) -> Union[str, None]:
         karma_section_block = await self.__get_user_karma_section()
-        comment_karma_match = re.search(r'"fromComments":[\d]*', str(karma_section_block))
+        comment_karma_match = re.search(KARMA["comment"], str(karma_section_block))
         if comment_karma_match:
             return comment_karma_match.group().split(':')[1]
 
     async def get_user_total_karma(self) -> Union[str, None]:
         karma_section_block = await self.__get_user_karma_section()
-        total_karma_match = re.search(r'"total":[\d]*', str(karma_section_block))
+        total_karma_match = re.search(KARMA["total"], str(karma_section_block))
         if total_karma_match:
             return total_karma_match.group().split(':')[1]
 
