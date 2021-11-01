@@ -16,7 +16,7 @@ USER_NAME = {
 COMMENTS = {
     "elem": "span",
     "attrs": {"class": "FHCV02u6Cp2zYL0fhQPsO"},
-    "nested_attrs": {"class": "D6SuXeSnAAagG8dKAb4O4"}
+    "sub_attrs": {"class": "D6SuXeSnAAagG8dKAb4O4"}
 }
 
 VOTES = {
