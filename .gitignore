@@ -3,5 +3,5 @@ reddit-virtenv
 *.pyc
 .idea/
 chromedriver
-snippets.py
-tests.py
+reddit-*.txt
+output_files/
