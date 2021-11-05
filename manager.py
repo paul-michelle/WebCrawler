@@ -29,7 +29,7 @@ class Manager:
 
     async def run(self) -> None:
         with self.__loader:
-            while not self.__collector.collector_filled:
+            while not self.__collector.is_full:
                 posts_to_parse = self.get_posts_to_parse()
                 parsing_results = await self.parse_posts(posts_to_parse)
                 self.collect_valid_info(parsing_results)

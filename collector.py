@@ -20,5 +20,9 @@ class ValidDataCollector:
         return self.__valid_data
 
     @property
-    def collector_filled(self) -> bool:
+    def is_full(self) -> bool:
         return self.data_length == self.posts_for_parsing_num
+
+    @property
+    def is_empty(self) -> bool:
+        return self.data_length == 0
