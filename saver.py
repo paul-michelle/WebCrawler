@@ -29,6 +29,10 @@ class TextFileSaver(Saver):
     def calculate_filename(self) -> str:
         return f'{self.__target_dir_path}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
 
+    @property
+    def filename_calculated(self):
+        return re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(self.__target_dir_path)))
+
     def save(self) -> None:
 
         new_filename = self.calculate_filename()
