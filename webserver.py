@@ -21,9 +21,9 @@ _some_collector = []  # to be changed fo self.__collector
 
 class HTTPServer:
 
-    def __init__(self, host, port, server_name,
-                 saver=TextFileSaver(settings.TARGET_DIR_PATH),
-                 collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):
+    def __init__(self, host: str, port: int, server_name: str,
+                 saver=TextFileSaver(settings.TARGET_DIR_PATH),  # Typing?
+                 collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):  # Typing?
         self._host = host
         self._port = port
         self._server_name = server_name
@@ -56,7 +56,7 @@ class HTTPServer:
     def form_http_request(self, connection_established):
         file_to_read = connection_established.makefile('rb')
         method, target, http_version = self.parse_request_line(file_to_read)
-        headers = self.parse_headers(file_to_read)
+        headers = self.parse_headers_block(file_to_read)
         host_specified = headers.get('Host')
         if host_specified in (self._server_name, f'{self._server_name}:{self._port}'):
             return HTTPRequest(method, target, http_version, headers, file_to_read)
@@ -74,7 +74,7 @@ class HTTPServer:
         return words_in_request_line
 
     @staticmethod
-    def parse_headers(file_to_read) -> email.message.Message:
+    def parse_headers_block(file_to_read) -> email.message.Message:
         headers: List = []
         while True:
             next_raw_bytes_line = file_to_read.readline(MAX_LINE_BINARY_LENGTH + 1)
@@ -115,7 +115,7 @@ class HTTPServer:
         return HTTPResponse(status=404, reason='Not found')
 
     def get_all_written_posts(self):
-        with open(self.__saver.absolute_path, 'r') as f:
+        with open(self.__saver.path_to_new_file, 'r') as f:
             already_written_lines = f.readlines()
         response_text = [format_utils.inline_values_to_dict(line) for line in already_written_lines]
         response_body = json.dumps(response_text).encode('utf-8')
@@ -123,23 +123,25 @@ class HTTPServer:
         return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
 
     def write_next_post(self):
-        # if self.__collector.is_empty:
-        if len(_some_collector) == 0:
+        if self.__collector.is_empty:
             return HTTPResponse(status=404, reason='All parsed data exhausted')
+        post_to_append = self.__collector.get_one_entry()
         if not self.__saver.filename_calculated:
-            self.__saver.calculate_filename()
-        with open(self.__saver.absolute_path, 'a') as f:
-            # post_to_append = self.__collector.pop(0)
-            post_to_append = _some_collector.pop(0)
+            with open(self.__saver.calculate_filename(), 'w') as f:
+                f.write(post_to_append + '\n')
+                unique_id = post_to_append.split(';')[0]
+                response_body = json.dumps({'unique_id': f'{unique_id}'}).encode('utf-8')
+                headers = [('Content-Type', CONTENT_TYPE), ('Content-Length', len(response_body))]
+                return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
+        with open(self.__saver.path_to_new_file, 'a') as f:
             f.write(post_to_append + '\n')
-
         unique_id = post_to_append.split(';')[0]
         response_body = json.dumps({'unique_id': f'{unique_id}'}).encode('utf-8')
         headers = [('Content-Type', CONTENT_TYPE), ('Content-Length', len(response_body))]
         return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
 
     def retrieve_post(self, unique_id: str) -> object:
-        with open(self.__saver.absolute_path, 'r') as f:
+        with open(self.__saver.path_to_new_file, 'r') as f:
             already_written_lines = f.readlines()
         for line in already_written_lines:
             if line.startswith(unique_id):
@@ -154,7 +156,7 @@ class HTTPServer:
         sent_info = json.loads(request.body.decode('utf-8'))
         if not format_utils.info_is_valid(sent_info):
             return HTTPResponse(status=404, reason='Improper request body')
-        with open(self.__saver.absolute_path, 'r+') as f:
+        with open(self.__saver.path_to_new_file, 'r+') as f:
             already_written_lines = f.readlines()
             f.seek(0)
             for line in already_written_lines:
@@ -162,12 +164,13 @@ class HTTPServer:
                     line = format_utils.dict_to_values_inline(sent_info)
                     update_made = True
                 f.write(line)
+            f.truncate()
         if update_made:
             return HTTPResponse(status=200, reason='Entry successfully updated')
         return HTTPResponse(status=404, reason='Entry not found in txt file')
 
     def delete_post(self, unique_id: str) -> object:
-        with open(self.__saver.absolute_path, 'r+') as f:
+        with open(self.__saver.path_to_new_file, 'r+') as f:
             already_written_lines = f.readlines()
             f.seek(0)
             for line in already_written_lines:
@@ -181,22 +184,17 @@ class HTTPServer:
 
     @staticmethod
     def send_response(connection_established, response):
-        file_to_write = connection_established.makefile('wb')
-        status_line = f'HTTP/1.1 {response.status} {response.reason}\r\n'.encode('iso-8859-1')
-        file_to_write.write(status_line)
-
-        if response.headers:
-            for (key, value) in response.headers:
-                header_line = f'{key}: {value}\r\n'.encode('iso-8859-1')
-                file_to_write.write(header_line)
-
-        file_to_write.write(b'\r\n')
-
-        if response.body:
-            file_to_write.write(response.body)
-
-        file_to_write.flush()
-        file_to_write.close()
+        with connection_established.makefile('wb') as file_to_write:
+            status_line = f'HTTP/1.1 {response.status} {response.reason}\r\n'.encode('iso-8859-1')
+            file_to_write.write(status_line)
+            if response.headers:
+                for (key, value) in response.headers:
+                    header_line = f'{key}: {value}\r\n'.encode('iso-8859-1')
+                    file_to_write.write(header_line)
+            file_to_write.write(b'\r\n')
+            if response.body:
+                file_to_write.write(response.body)
+            file_to_write.flush()
 
 
 class HTTPRequest:

@@ -47,16 +47,18 @@ class Parser:
         return utils.get_category(self.post.find(CATEGORY["elem"], attrs=CATEGORY["attrs"]))
 
     async def __get_user_profile_soup(self) -> BeautifulSoup:
-        user_url = f'https://www.reddit.com' \
-                   f'{utils.get_link(self.post.find(USER_NAME["elem"], attrs=USER_NAME["attrs"]))}'
-        async with ClientSession(headers=HEADERS) as session:
-            user_response = await session.request(method="GET", url=user_url)
-            html = await user_response.read()
-        return BeautifulSoup(html, features='lxml')
+        user_link_available = utils.get_link(self.post.find(USER_NAME["elem"], attrs=USER_NAME["attrs"]))
+        if user_link_available:
+            user_url = f'https://www.reddit.com{user_link_available}'
+            async with ClientSession(headers=HEADERS) as session:
+                user_response = await session.request(method="GET", url=user_url)
+                html = await user_response.read()
+            return BeautifulSoup(html, features='lxml')
 
     async def __get_user_profile_card(self) -> BeautifulSoup:
-        user_profile = await self.__get_user_profile_soup()
-        return user_profile.find(CAKEDAY["elem"], attrs=CAKEDAY["attrs"])
+        user_profile_available = await self.__get_user_profile_soup()
+        if user_profile_available:
+            return user_profile_available.find(CAKEDAY["elem"], attrs=CAKEDAY["attrs"])
 
     async def get_user_cakeday(self) -> Union[str, None]:
         card_available = await self.__get_user_profile_card()
@@ -66,11 +68,12 @@ class Parser:
                         f'{utils.get_link(self.post.find(USER_NAME["elem"], attrs=USER_NAME["attrs"]))}')
 
     async def __get_user_karma_section(self) -> str:
-        user_profile = await self.__get_user_profile_soup()
-        return user_profile.find(KARMA["elem"], attrs=KARMA["attrs"])
+        user_profile_available = await self.__get_user_profile_soup()
+        if user_profile_available:
+            return user_profile_available.find(KARMA["elem"], attrs=KARMA["attrs"])
 
     async def get_user_post_karma(self) -> Optional[str]:
-        karma_section_block = await self.__get_user_karma_section()
+        karma_section_block= await self.__get_user_karma_section()
         return utils.get_match(re.search(KARMA["post"], str(karma_section_block)))
 
     async def get_user_comment_karma(self) -> Optional[str]:

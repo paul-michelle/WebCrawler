@@ -1,14 +1,20 @@
+import asyncio
+import logging
 from typing import List
 from parser import Parser
-import asyncio
+from loader import Loader
+from collector import ValidDataCollector
+from saver import TextFileSaver
+from webserver import HTTPServer
 
 
 class Manager:
 
-    def __init__(self, loader, collector, saver):
+    def __init__(self, loader: Loader, collector: ValidDataCollector, saver: TextFileSaver, server: HTTPServer):
         self.__loader = loader
         self.__collector = collector
         self.__saver = saver
+        self.__server = server
 
     def get_posts_to_parse(self) -> List:
         posts_to_load_count = self.__collector.posts_for_parsing_num - self.__collector.data_length
@@ -22,10 +28,11 @@ class Manager:
         for result in results:
             self.__collector.collect(result)
 
-    def save_data(self) -> None:
-        data_to_save = self.__collector.data
-        self.__saver.set_data(data_to_save)
-        self.__saver.save()
+    def start_server(self):
+        try:
+            self.__server.serve_forever()
+        except KeyboardInterrupt:
+            logging.info('Server stopped with KeyBoard')
 
     async def run(self) -> None:
         with self.__loader:
@@ -34,4 +41,4 @@ class Manager:
                 parsing_results = await self.parse_posts(posts_to_parse)
                 self.collect_valid_info(parsing_results)
         self.__saver.remove_old_file()
-        self.save_data()
+        self.start_server()

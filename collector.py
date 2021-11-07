@@ -11,6 +11,9 @@ class ValidDataCollector:
         if data is not None and data not in self.__valid_data:
             self.__valid_data.append(data)
 
+    def get_one_entry(self):
+        return self.__valid_data.pop(0)
+
     @property
     def data_length(self) -> int:
         return len(self.__valid_data)
