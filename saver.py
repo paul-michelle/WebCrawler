@@ -3,6 +3,7 @@ import re
 import logging
 from datetime import datetime
 from abc import ABC, abstractmethod
+from typing import List
 
 
 class Saver(ABC):
@@ -13,11 +14,11 @@ class Saver(ABC):
 
 class TextFileSaver(Saver):
 
-    def __init__(self, target_dir_path) -> None:
+    def __init__(self, target_dir_path: str) -> None:
         self.__target_dir_path = target_dir_path
         self.__data = None
 
-    def set_data(self, data) -> None:
+    def set_data(self, data: List[str]) -> None:
         self.__data = data
 
     def remove_old_file(self) -> None:
@@ -30,11 +31,11 @@ class TextFileSaver(Saver):
         return f'{self.__target_dir_path}{os.sep}reddit-{datetime.now().strftime("%Y%m%d%H%M")}.txt'
 
     @property
-    def filename_calculated(self):
+    def filename_calculated(self) -> re.Match:
         return re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(self.__target_dir_path)))
 
     @property
-    def path_to_new_file(self):
+    def path_to_new_file(self) -> str:
         return f'{self.__target_dir_path}{os.sep}{self.filename_calculated.group()}'
 
     def save(self) -> None:

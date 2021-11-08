@@ -19,7 +19,7 @@ if __name__ == '__main__':
     current_loader = Loader(webdriver_path=args.chromedriver_path, page_to_scrape=args.url)
     current_collector = ValidDataCollector(posts_for_parsing_num=args.number)
     current_saver = TextFileSaver(target_dir_path=args.target_dir_path)
-    current_server = HTTPServer(host='localhost', port=8087, server_name='reddit-scraper',
+    current_server = HTTPServer(host=args.host, port=args.port, server_name=args.server,
                                 saver=current_saver, collector=current_collector)
 
     manager = Manager(loader=current_loader,
@@ -28,9 +28,9 @@ if __name__ == '__main__':
                       server=current_server)
 
     start_time = datetime.now()
-    logging.info(f'Reddit-scraper program launched --- {start_time}')
+    logging.info(f'Reddit-scraper launched --- {start_time}')
 
     asyncio.run(manager.run())
 
-    logging.info(f'Reddit-scraping completed --- {datetime.now()}. '
-                 f'Execution time: {time() - start_time.timestamp()} seconds.')
+    logging.info(f'Program completed --- {datetime.now()}. '
+                 f'Duration: {time() - start_time.timestamp()} seconds.')

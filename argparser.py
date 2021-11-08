@@ -28,3 +28,21 @@ argparser.add_argument(
     default=settings.POSTS_FOR_PARSING_NUM,
     help='number of posts to parse'
 )
+argparser.add_argument(
+    '--host',
+    type=str,
+    default=settings.HOST,
+    help='host address'
+)
+argparser.add_argument(
+    '--port',
+    type=int,
+    default=settings.PORT,
+    help='number of port to launch webserver on'
+)
+argparser.add_argument(
+    '--server',
+    type=str,
+    default=settings.SERVER_NAME,
+    help='name of the webserver running on the given address'
+)

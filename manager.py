@@ -11,14 +11,14 @@ from webserver import HTTPServer
 class Manager:
 
     def __init__(self, loader: Loader, collector: ValidDataCollector, saver: TextFileSaver, server: HTTPServer):
-        self.__loader = loader
-        self.__collector = collector
-        self.__saver = saver
-        self.__server = server
+        self._loader = loader
+        self._collector = collector
+        self._saver = saver
+        self._server = server
 
     def get_posts_to_parse(self) -> List:
-        posts_to_load_count = self.__collector.posts_for_parsing_num - self.__collector.data_length
-        return self.__loader.load_posts(posts_to_load_count)
+        posts_to_load_count = self._collector.posts_for_parsing_num - len(self._collector)
+        return self._loader.load_posts(posts_to_load_count)
 
     @staticmethod
     async def parse_posts(posts_to_parse: List) -> List:
@@ -26,19 +26,21 @@ class Manager:
 
     def collect_valid_info(self, results: List) -> None:
         for result in results:
-            self.__collector.collect(result)
+            self._collector.collect(result)
 
     def start_server(self):
         try:
-            self.__server.serve_forever()
+            self._server.serve_forever()
         except KeyboardInterrupt:
             logging.info('Server stopped with KeyBoard')
 
     async def run(self) -> None:
-        with self.__loader:
-            while not self.__collector.is_full:
+        with self._loader:
+            while not self._collector.is_full:
                 posts_to_parse = self.get_posts_to_parse()
                 parsing_results = await self.parse_posts(posts_to_parse)
                 self.collect_valid_info(parsing_results)
-        self.__saver.remove_old_file()
+            logging.info(f'Collector is filled with valid parsed data. '
+                         f'Collected info on {len(self._collector)}')
+        self._saver.remove_old_file()
         self.start_server()

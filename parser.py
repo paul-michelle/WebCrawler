@@ -73,7 +73,7 @@ class Parser:
             return user_profile_available.find(KARMA["elem"], attrs=KARMA["attrs"])
 
     async def get_user_post_karma(self) -> Optional[str]:
-        karma_section_block= await self.__get_user_karma_section()
+        karma_section_block = await self.__get_user_karma_section()
         return utils.get_match(re.search(KARMA["post"], str(karma_section_block)))
 
     async def get_user_comment_karma(self) -> Optional[str]:

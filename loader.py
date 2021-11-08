@@ -15,43 +15,43 @@ MAX_WAIT_TIME = 30
 class Loader:
 
     def __init__(self, page_to_scrape: str, webdriver_path: str) -> None:
-        self.page_to_scrape = page_to_scrape
-        self.webdriver_path = webdriver_path
-        self.driver = webdriver.Chrome(self.webdriver_path)
-        self.loading_start_index = 0
+        self._page_to_scrape = page_to_scrape
+        self._webdriver_path = webdriver_path
+        self._driver = webdriver.Chrome(self._webdriver_path)
+        self._loading_start_index = 0
 
     def __enter__(self) -> None:
-        self.navigate_to_page()
+        self._navigate_to_page()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.quit()
+        self._quit()
 
-    def navigate_to_page(self) -> None:
+    def _navigate_to_page(self) -> None:
         try:
-            self.driver.get(self.page_to_scrape)
-            logging.info(f"WebDriver's navigating to the {self.page_to_scrape} --- {datetime.now()}")
+            self._driver.get(self._page_to_scrape)
+            logging.info(f"WebDriver's navigating to the {self._page_to_scrape} --- {datetime.now()}")
         except WebDriverException:
             logging.error('---Failed to connect. Check Internet connection and the URL.')
 
-    def load_posts(self, posts_to_load_count: int) -> List:
+    def load_posts(self, posts_to_load_count: int) -> List[BeautifulSoup]:
 
-        logging.info(f'Loading dynamic content of the webpage {self.page_to_scrape} '
+        logging.info(f'Loading dynamic content of the webpage {self._page_to_scrape} '
                      f'--- {datetime.now()}')
         start_time = time()
 
         while True:
             scroll_down = "window.scrollBy(0,3000);"
             try:
-                self.driver.execute_script(scroll_down)
+                self._driver.execute_script(scroll_down)
             except UnexpectedAlertPresentException:
                 logging.error('An unexpected alert has appeared. An unexpected modal'
                               'is probably blocking the webdriver from executing'
                               'the scroll-down command')
-            content = self.driver.page_source
+            content = self._driver.page_source
             soup = BeautifulSoup(content, features="lxml")
 
             posts = soup.findAll('div', attrs={"class": "Post"},
-                                 limit=self.loading_start_index + posts_to_load_count)[self.loading_start_index:]
+                                 limit=self._loading_start_index + posts_to_load_count)[self._loading_start_index:]
             time_spent = time() - start_time
             if len(posts) == posts_to_load_count:
                 logging.info(f'Loading of dynamic content finished --- {datetime.now()}.'
@@ -62,9 +62,9 @@ class Loader:
                                 f'for {MAX_WAIT_TIME} seconds.')
                 break
 
-        self.loading_start_index += len(posts)
+        self._loading_start_index += len(posts)
 
         return posts
 
-    def quit(self) -> None:
-        self.driver.quit()
+    def _quit(self) -> None:
+        self._driver.quit()
