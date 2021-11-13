@@ -1,8 +1,13 @@
+"""Order the instructions.
+
+The module helps manage the methods supplied by the main operating modules:
+loader -> parser -> collector -> saver & webserver."""
+
 import asyncio
 import logging
 from typing import List
-from parser import Parser
 from loader import Loader
+from parser import Parser
 from collector import ValidDataCollector
 from saver import TextFileSaver
 from webserver import HTTPServer

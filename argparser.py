@@ -1,3 +1,5 @@
+"""Allow to optionally set key project constants via commandline."""
+
 import argparse
 import settings
 

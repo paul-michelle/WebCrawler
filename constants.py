@@ -1,3 +1,5 @@
+"""Keep reddit html tags and attribute actual for the time being."""
+
 POST_URL = {
     "elem": "a",
     "attrs": {"class": "_3jOxDPIQ0KaOWpzvSQo-1s"}

@@ -1,3 +1,8 @@
+"""Set default values of the main constants.
+
+All of the constants are allowed to be set via commandline as its arguments.
+The default values, though, are taken from here by the argparser-module."""
+
 import os
 import dotenv
 

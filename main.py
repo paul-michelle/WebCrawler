@@ -1,3 +1,10 @@
+"""Run the program.
+
+Set the argparser to read the commandline optional arguments, tune the logging this
+the needed threshold (INFO by default). Instantiate the currently needed operating tools:
+loader, parser, collector, saver & webserver. Instantiate a manager that gives all the necessary
+instructions via its comprehensive run method."""
+
 import os
 import logging
 import asyncio

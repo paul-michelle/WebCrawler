@@ -1,3 +1,10 @@
+"""Run a server on localhost.
+
+The module allows to work with the output file via simple RESTful API.
+The request sent to localhost are parsed by the webserver method. The crud-commands
+in the request are executed onto the output-file with the responses formed and
+sent back to the client."""
+
 import settings
 import utils
 import _io
@@ -7,7 +14,7 @@ import email.message
 import re
 import socket
 import sys
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Union
 from email.parser import Parser as mail_parser
 from urllib.parse import urlparse
 from saver import TextFileSaver
@@ -137,7 +144,7 @@ class HTTPServer:
                 raise Exception(f'Max headers lines number exceeded. Limit is {MAX_HEADERS_LINES}')
         return mail_parser().parsestr(''.join(headers))
 
-    def handle_http_request(self, request: HTTPRequest) -> Optional[Callable, HTTPResponse]:
+    def handle_http_request(self, request: HTTPRequest) -> Union[Callable, HTTPResponse]:
         if request.path == '/posts/' and request.method == 'POST':
             return self.write_next_post()
 
@@ -226,7 +233,7 @@ class HTTPServer:
             f.seek(0)
             if len(f.readlines()) == len(already_written_lines):
                 return HTTPResponse(status=404, reason='Entry not found in txt file')
-        return HTTPResponse(status=204, reason='Post deleted')
+        return HTTPResponse(status=204, reason='Entry deleted')
 
     @staticmethod
     def send_response(connection_established: socket.socket, response: HTTPResponse) -> None:

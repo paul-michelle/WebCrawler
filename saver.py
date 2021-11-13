@@ -1,3 +1,10 @@
+"""Save parsed data to an instance.
+
+The module currently gives methods to check if previous output files exist,
+remove old files and save parsed data into a certain instance, e.g. textfile.
+When working via webserver, those crud-corresponding methods are supplied
+by the wevserver-module."""
+
 import os
 import re
 import logging

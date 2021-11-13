@@ -1,3 +1,5 @@
+"""Parse loaded data, filtering out entries with missing info."""
+
 import settings
 import utils
 import re

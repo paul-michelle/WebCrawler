@@ -1,3 +1,9 @@
+"""Load the info to the parsed.
+
+The module allows to launch and interact with the webbrowser.
+Its main task is to load enough raw into to be further refined
+by the parser module."""
+
 import settings
 import logging
 from typing import List

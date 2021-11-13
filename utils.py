@@ -1,3 +1,9 @@
+"""Perform operations with strings.
+
+The module helps filter out invalid elements and perform operations with strings
+out of parsed data in the parser-module, as well as dict to string and backwards modifications
+to allow json-modification and data-validation in the webserver-module."""
+
 import re
 from typing import Optional, List
 from typing import Dict
@@ -37,7 +43,7 @@ def inline_values_to_dict(line: str) -> Dict:
     return dict(zip(pattern_keys, values))
 
 
-def info_is_valid(decoded_request_body: Dict[str:str]) -> bool:
+def info_is_valid(decoded_request_body: Dict[str, str]) -> bool:
     received_keys = decoded_request_body.keys()
     if len(received_keys) <= len(pattern_keys):
         mirror_key_pairs = zip(pattern_keys, received_keys)
@@ -45,7 +51,7 @@ def info_is_valid(decoded_request_body: Dict[str:str]) -> bool:
     return False
 
 
-def dict_to_values_inline(decoded_request_body: Dict[str:str]) -> str:
+def dict_to_values_inline(decoded_request_body: Dict[str, str]) -> str:
     return ';'.join(decoded_request_body.values()) + '\n'
 
 
