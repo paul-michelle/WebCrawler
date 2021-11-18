@@ -9,13 +9,13 @@ from typing import List
 from loader import Loader
 from parser import Parser
 from collector import ValidDataCollector
-from saver import TextFileSaver
+from txt_executor import TxtExecutor
 from webserver import HTTPServer
 
 
 class Manager:
 
-    def __init__(self, loader: Loader, collector: ValidDataCollector, saver: TextFileSaver, server: HTTPServer):
+    def __init__(self, loader: Loader, collector: ValidDataCollector, saver: TxtExecutor, server: HTTPServer):
         self._loader = loader
         self._collector = collector
         self._saver = saver

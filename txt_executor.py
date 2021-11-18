@@ -1,25 +1,17 @@
-"""Save parsed data to an instance.
+"""Executor of CRUD operations upon to a txt instance.
 
-The module currently gives methods to check if previous output files exist,
-remove old files and save parsed data into a certain instance, e.g. textfile.
-When working via webserver, those crud-corresponding methods are supplied
-by the wevserver-module."""
+The module gives methods to check if a previous output txt-file exists,
+remove old file, touch a new one and perform CRUD upon it."""
 
 import os
 import re
 import logging
 from datetime import datetime
-from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional, Union, Dict, Any
+from base_crud_executor import BaseCrudExecutor
 
 
-class Saver(ABC):
-    @abstractmethod
-    def save(self) -> None:
-        pass
-
-
-class TextFileSaver(Saver):
+class TxtExecutor(BaseCrudExecutor):
 
     def __init__(self, target_dir_path: str) -> None:
         self.__target_dir_path = target_dir_path
@@ -45,7 +37,7 @@ class TextFileSaver(Saver):
     def path_to_new_file(self) -> str:
         return f'{self.__target_dir_path}{os.sep}{self.filename_calculated.group()}'
 
-    def save(self) -> None:
+    def insert_all_remaining(self) -> None:
 
         new_filename = self.calculate_filename()
         logging.info(f'Starting to write into file --- {datetime.now()}')
@@ -56,3 +48,15 @@ class TextFileSaver(Saver):
         except OSError:
             logging.error('Unable to write scraped data into the file')
         logging.info(f'Writing to file completed --- {datetime.now()}')
+
+    def insert(self) -> str:
+        pass
+
+    def replace(self) -> Optional[bool]:
+        pass
+
+    def delete(self) -> Optional[bool]:
+        pass
+
+    def find(self) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        pass

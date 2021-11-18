@@ -17,7 +17,7 @@ import sys
 from typing import List, Optional, Callable, Union
 from email.parser import Parser as mail_parser
 from urllib.parse import urlparse
-from saver import TextFileSaver
+from txt_executor import TxtExecutor
 from collector import ValidDataCollector
 
 MAX_LINE_BINARY_LENGTH = 64 * 1024
@@ -78,12 +78,12 @@ class HTTPResponse:
 class HTTPServer:
 
     def __init__(self, host: str, port: int, server_name: str,
-                 saver=TextFileSaver(settings.TARGET_DIR_PATH),
+                 executor=TxtExecutor(settings.TARGET_DIR_PATH),
                  collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):
         self._host = host
         self._port = port
         self._server_name = server_name
-        self._saver = saver
+        self._executor = executor
         self._collector = collector
 
     def serve_forever(self) -> None:
@@ -148,7 +148,7 @@ class HTTPServer:
         if request.path == '/posts/' and request.method == 'POST':
             return self.write_next_post()
 
-        if not self._saver.filename_calculated:
+        if not self._executor.filename_calculated:
             return HTTPResponse(status=404, reason='File to save parsed data was never created')
 
         if request.path == '/posts/' and request.method == 'GET':
@@ -171,7 +171,7 @@ class HTTPServer:
         return HTTPResponse(status=404, reason='Not found')
 
     def get_all_written_posts(self) -> HTTPResponse:
-        with open(self._saver.path_to_new_file, 'r') as f:
+        with open(self._executor.path_to_new_file, 'r') as f:
             already_written_lines = f.readlines()
         response_text = [utils.inline_values_to_dict(line) for line in already_written_lines]
         response_body = json.dumps(response_text).encode('utf-8')
@@ -185,16 +185,16 @@ class HTTPServer:
         unique_id = post_to_append.split(';')[0]
         response_body = json.dumps({'unique_id': f'{unique_id}'}).encode('utf-8')
         headers = utils.form_headers(response_body)
-        if not self._saver.filename_calculated:
-            with open(self._saver.calculate_filename(), 'w') as f:
+        if not self._executor.filename_calculated:
+            with open(self._executor.calculate_filename(), 'w') as f:
                 f.write(post_to_append + '\n')
                 return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
-        with open(self._saver.path_to_new_file, 'a') as f:
+        with open(self._executor.path_to_new_file, 'a') as f:
             f.write(post_to_append + '\n')
         return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
 
     def retrieve_post(self, unique_id: str) -> HTTPResponse:
-        with open(self._saver.path_to_new_file, 'r') as f:
+        with open(self._executor.path_to_new_file, 'r') as f:
             already_written_lines = f.readlines()
         for line in already_written_lines:
             if line.startswith(unique_id):
@@ -209,7 +209,7 @@ class HTTPServer:
         sent_info = json.loads(request.body.decode('utf-8'))
         if not utils.info_is_valid(sent_info):
             return HTTPResponse(status=404, reason='Improper request body')
-        with open(self._saver.path_to_new_file, 'r+') as f:
+        with open(self._executor.path_to_new_file, 'r+') as f:
             already_written_lines = f.readlines()
             f.seek(0)
             for line in already_written_lines:
@@ -223,7 +223,7 @@ class HTTPServer:
         return HTTPResponse(status=404, reason='Entry not found in txt file')
 
     def delete_post(self, unique_id: str) -> HTTPResponse:
-        with open(self._saver.path_to_new_file, 'r+') as f:
+        with open(self._executor.path_to_new_file, 'r+') as f:
             already_written_lines = f.readlines()
             f.seek(0)
             for line in already_written_lines:
@@ -248,6 +248,18 @@ class HTTPServer:
             if response.body_sent:
                 file_to_write.write(response.body_sent)
             file_to_write.flush()
+
+
+class HTTPServerFeatMongo(HTTPServer):
+
+    def __init__(self, executor, host: str, port: int, server_name: str,
+                 collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):
+        super().__init__(host=host, port=port, server_name=server_name, collector=collector, executor=executor)
+
+
+inst = HTTPServerFeatMongo(host='123', port=13, server_name='qwerty', executor=123)
+print(inst.__dict__)
+print(inst._port)
 
 
 if __name__ == '__main__':
