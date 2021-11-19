@@ -1,10 +1,10 @@
 """Parse loaded data, filtering out entries with missing info."""
 
+import logging
 import settings
 import utils
 import re
 import uuid
-import logging
 import asyncio
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup

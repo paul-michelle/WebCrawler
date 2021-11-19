@@ -3,22 +3,20 @@
 The module helps manage the methods supplied by the main operating modules:
 loader -> parser -> collector -> saver & webserver."""
 
-import asyncio
 import logging
+import asyncio
 from typing import List
 from loader import Loader
 from parser import Parser
 from collector import ValidDataCollector
-from txt_executor import TxtExecutor
 from webserver import HTTPServer
 
 
 class Manager:
 
-    def __init__(self, loader: Loader, collector: ValidDataCollector, saver: TxtExecutor, server: HTTPServer):
+    def __init__(self, loader: Loader, collector: ValidDataCollector, server: HTTPServer):
         self._loader = loader
         self._collector = collector
-        self._saver = saver
         self._server = server
 
     def get_posts_to_parse(self) -> List:
@@ -47,5 +45,5 @@ class Manager:
                 self.collect_valid_info(parsing_results)
             logging.info(f'Collector is filled with valid parsed data. '
                          f'Collected info on {len(self._collector)}')
-        self._saver.remove_old_file()
+
         self.start_server()

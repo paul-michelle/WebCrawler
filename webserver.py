@@ -14,10 +14,10 @@ import email.message
 import re
 import socket
 import sys
-from typing import List, Optional, Callable, Union
+from typing import List, Optional, Callable, Union, Type
 from email.parser import Parser as mail_parser
 from urllib.parse import urlparse
-from txt_executor import TxtExecutor
+from base_crud_executor import BaseCrudExecutor
 from collector import ValidDataCollector
 
 MAX_LINE_BINARY_LENGTH = 64 * 1024
@@ -78,8 +78,7 @@ class HTTPResponse:
 class HTTPServer:
 
     def __init__(self, host: str, port: int, server_name: str,
-                 executor=TxtExecutor(settings.TARGET_DIR_PATH),
-                 collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):
+                 executor: BaseCrudExecutor, collector: ValidDataCollector):
         self._host = host
         self._port = port
         self._server_name = server_name
@@ -148,16 +147,14 @@ class HTTPServer:
         if request.path == '/posts/' and request.method == 'POST':
             return self.write_next_post()
 
-        if not self._executor.filename_calculated:
-            return HTTPResponse(status=404, reason='File to save parsed data was never created')
-
         if request.path == '/posts/' and request.method == 'GET':
-            return self.get_all_written_posts()
+            return self.retrieve_all_written_posts()
 
         single_post_crud = re.search('/posts/[\w]*/', request.path)
         unique_id = request.path.split('/')[2]
         if len(unique_id) != UUID_LENGTH:
-            return HTTPResponse(status=404, reason='Inadequate unique_id length. 32 chars expected')
+            return HTTPResponse(status=404, reason='Inadequate unique_id length. '
+                                                   '32 chars expected')
 
         if single_post_crud and request.method == 'GET':
             return self.retrieve_post(unique_id)
@@ -170,70 +167,49 @@ class HTTPServer:
 
         return HTTPResponse(status=404, reason='Not found')
 
-    def get_all_written_posts(self) -> HTTPResponse:
-        with open(self._executor.path_to_new_file, 'r') as f:
-            already_written_lines = f.readlines()
-        response_text = [utils.inline_values_to_dict(line) for line in already_written_lines]
-        response_body = json.dumps(response_text).encode('utf-8')
-        headers = utils.form_headers(response_body)
-        return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
-
     def write_next_post(self) -> HTTPResponse:
         if self._collector.is_empty:
             return HTTPResponse(status=404, reason='All parsed data exhausted')
         post_to_append = self._collector.get_one_entry()
-        unique_id = post_to_append.split(';')[0]
+        unique_id = self._executor.insert(post_to_append)
         response_body = json.dumps({'unique_id': f'{unique_id}'}).encode('utf-8')
         headers = utils.form_headers(response_body)
-        if not self._executor.filename_calculated:
-            with open(self._executor.calculate_filename(), 'w') as f:
-                f.write(post_to_append + '\n')
-                return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
-        with open(self._executor.path_to_new_file, 'a') as f:
-            f.write(post_to_append + '\n')
         return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
 
+    def retrieve_all_written_posts(self) -> HTTPResponse:
+        info_found = self._executor.find()
+        if info_found:
+            response_body = json.dumps(info_found).encode('utf-8')
+            headers = utils.form_headers(response_body)
+            return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
+        return HTTPResponse(status=404, reason='No written entries yet')
+
     def retrieve_post(self, unique_id: str) -> HTTPResponse:
-        with open(self._executor.path_to_new_file, 'r') as f:
-            already_written_lines = f.readlines()
-        for line in already_written_lines:
-            if line.startswith(unique_id):
-                response_text = utils.inline_values_to_dict(line)
-                response_body = json.dumps(response_text).encode('utf-8')
-                headers = utils.form_headers(response_body)
-                return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
-        return HTTPResponse(status=404, reason='Entry not found in txt file')
+        post_found = self._executor.find(unique_id)
+        if post_found:
+            response_body = json.dumps(post_found).encode('utf-8')
+            headers = utils.form_headers(response_body)
+            return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
+        return HTTPResponse(status=404, reason='Entry not found')
 
     def update_post(self, request: HTTPRequest) -> HTTPResponse:
-        update_made = False
         sent_info = json.loads(request.body.decode('utf-8'))
         if not utils.info_is_valid(sent_info):
             return HTTPResponse(status=404, reason='Improper request body')
-        with open(self._executor.path_to_new_file, 'r+') as f:
-            already_written_lines = f.readlines()
-            f.seek(0)
-            for line in already_written_lines:
-                if line.startswith(sent_info['unique_id']):
-                    line = utils.dict_to_values_inline(sent_info)
-                    update_made = True
-                f.write(line)
-            f.truncate()
-        if update_made:
+        update_performed = self._executor.update(sent_info)
+        if update_performed is None:
+            return HTTPResponse(status=404, reason='No written entries yet')
+        if update_performed:
             return HTTPResponse(status=200, reason='Entry successfully updated')
-        return HTTPResponse(status=404, reason='Entry not found in txt file')
+        return HTTPResponse(status=404, reason='Entry not found')
 
     def delete_post(self, unique_id: str) -> HTTPResponse:
-        with open(self._executor.path_to_new_file, 'r+') as f:
-            already_written_lines = f.readlines()
-            f.seek(0)
-            for line in already_written_lines:
-                if not line.startswith(unique_id):
-                    f.write(line)
-            f.truncate()
-            f.seek(0)
-            if len(f.readlines()) == len(already_written_lines):
-                return HTTPResponse(status=404, reason='Entry not found in txt file')
-        return HTTPResponse(status=204, reason='Entry deleted')
+        deletion_performed = self._executor.delete(unique_id)
+        if deletion_performed is None:
+            return HTTPResponse(status=404, reason='No written entries yet')
+        if deletion_performed:
+            return HTTPResponse(status=204, reason='Entry deleted')
+        return HTTPResponse(status=404, reason='Entry not found')
 
     @staticmethod
     def send_response(connection_established: socket.socket, response: HTTPResponse) -> None:
@@ -250,17 +226,16 @@ class HTTPServer:
             file_to_write.flush()
 
 
-class HTTPServerFeatMongo(HTTPServer):
-
-    def __init__(self, executor, host: str, port: int, server_name: str,
-                 collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):
-        super().__init__(host=host, port=port, server_name=server_name, collector=collector, executor=executor)
-
-
-inst = HTTPServerFeatMongo(host='123', port=13, server_name='qwerty', executor=123)
-print(inst.__dict__)
-print(inst._port)
-
+# class HTTPServerFeatMongo(HTTPServer):
+#
+#     def __init__(self, executor, host: str, port: int, server_name: str,
+#                  collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):
+#         super().__init__(host=host, port=port, server_name=server_name, collector=collector, executor=executor)
+#
+#
+# inst = HTTPServerFeatMongo(host='123', port=13, server_name='qwerty', executor=123)
+# print(inst.__dict__)
+# print(inst._port)
 
 if __name__ == '__main__':
     host = sys.argv[1]

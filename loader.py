@@ -4,8 +4,8 @@ The module allows to launch and interact with the webbrowser.
 Its main task is to load enough raw into to be further refined
 by the parser module."""
 
-import settings
 import logging
+import settings
 from typing import List
 from selenium import webdriver
 from selenium.common.exceptions \
