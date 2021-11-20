@@ -9,17 +9,15 @@ import os
 import re
 import utils
 from datetime import datetime
-from typing import List, Optional, Union, Dict, Any, Callable
+from typing import List, Optional, Union, Dict, Any
 from base_crud_executor import BaseCrudExecutor
 
 
 class TxtInstanceManager:
 
-    def __init__(self, target_dir_path: str, method: Callable = None) -> None:
+    def __init__(self, target_dir_path: str) -> None:
         self.__target_dir_path = target_dir_path
-        self._old_file_name = ''
         self._remove_old_file()
-        self._method = method
 
     def _remove_old_file(self) -> None:
         old_file_exists = re.search('reddit-[0-9]{12}.txt', ''.join(os.listdir(self.__target_dir_path)))
@@ -43,27 +41,23 @@ class TxtInstanceManager:
         return f'{self.__target_dir_path}{os.sep}{self.filename_calculated.group()}'
 
 
-class TxtExecutor(BaseCrudExecutor):
+class TxtExecutor(BaseCrudExecutor, TxtInstanceManager):
 
     def __init__(self, target_dir_path: str) -> None:
-        self._target_dir_path = target_dir_path
-        self._file_manager = TxtInstanceManager(self._target_dir_path)
-        self._data = None
+        super().__init__(target_dir_path)
 
     def insert(self, post) -> str:
         unique_id = post.split(';')[0]
-        if self._file_manager.filename_calculated:
-            with open(self._file_manager.path_to_new_file, 'a') as f:
+        if self.filename_calculated:
+            with open(self.path_to_new_file, 'a') as f:
                 f.write(post + '\n')
                 return unique_id
-        with open(self._file_manager.calculate_filename(), 'w') as f:
+        with open(self.calculate_filename(), 'w') as f:
             f.write(post + '\n')
             return unique_id
 
     def find(self, unique_id: str = None) -> Union[Dict[str, Any], List[Dict[str, Any]], None]:
-        if not self._file_manager.filename_calculated:
-            return
-        with open(self._file_manager.path_to_new_file, 'r') as f:
+        with open(self.path_to_new_file, 'r') as f:
             already_written_lines = f.readlines()
         if unique_id is None:
             return [utils.inline_values_to_dict(line) for line in already_written_lines]
@@ -72,10 +66,8 @@ class TxtExecutor(BaseCrudExecutor):
                 return utils.inline_values_to_dict(line)
 
     def update(self, data: Dict[str, Any]) -> Optional[bool]:
-        if not self._file_manager.filename_calculated:
-            return
         update_performed = False
-        with open(self._file_manager.path_to_new_file, 'r+') as f:
+        with open(self.path_to_new_file, 'r+') as f:
             already_written_lines = f.readlines()
             f.seek(0)
             for line in already_written_lines:
@@ -87,10 +79,8 @@ class TxtExecutor(BaseCrudExecutor):
         return update_performed
 
     def delete(self, unique_id: str) -> Optional[bool]:
-        if not self._file_manager.filename_calculated:
-            return
         deletion_performed = False
-        with open(self._file_manager.path_to_new_file, 'r+') as f:
+        with open(self.path_to_new_file, 'r+') as f:
             already_written_lines = f.readlines()
             f.seek(0)
             for line in already_written_lines:

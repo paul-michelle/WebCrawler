@@ -46,13 +46,16 @@ def inline_values_to_dict(line: str) -> Dict:
 def info_is_valid(decoded_request_body: Dict[str, str]) -> bool:
     received_keys = decoded_request_body.keys()
     if len(received_keys) <= len(pattern_keys):
-        mirror_key_pairs = zip(pattern_keys, received_keys)
-        return all(pair[0] == pair[1] for pair in mirror_key_pairs)
+        return all(key in pattern_keys for key in received_keys)
     return False
 
 
 def dict_to_values_inline(decoded_request_body: Dict[str, str]) -> str:
-    return ';'.join(decoded_request_body.values()) + '\n'
+    return ';'.join(
+        decoded_request_body[pattern_key] if pattern_key in decoded_request_body.keys()
+        else '[DELETED]'
+        for pattern_key in pattern_keys
+    ) + '\n'
 
 
 def form_headers(response_body: bytes) -> List[tuple]:

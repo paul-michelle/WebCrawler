@@ -16,5 +16,5 @@ PAGE_TO_SCRAPE = "https://www.reddit.com/top/?t=month"
 POSTS_FOR_PARSING_NUM = 5
 
 HOST = 'localhost'
-PORT = 8087
+PORT = 8089
 SERVER_NAME = 'reddit-scraper'

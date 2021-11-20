@@ -5,16 +5,15 @@ The request sent to localhost are parsed by the webserver method. The crud-comma
 in the request are executed onto the output-file with the responses formed and
 sent back to the client."""
 
-import settings
 import utils
 import _io
-import json
 import logging
 import email.message
 import re
 import socket
 import sys
-from typing import List, Optional, Callable, Union, Type
+import json
+from typing import List, Optional, Callable, Union
 from email.parser import Parser as mail_parser
 from urllib.parse import urlparse
 from base_crud_executor import BaseCrudExecutor
@@ -147,10 +146,13 @@ class HTTPServer:
         if request.path == '/posts/' and request.method == 'POST':
             return self.write_next_post()
 
+        if self._collector.is_full:
+            return HTTPResponse(status=404, reason='No written entries yet')
+
         if request.path == '/posts/' and request.method == 'GET':
             return self.retrieve_all_written_posts()
 
-        single_post_crud = re.search('/posts/[\w]*/', request.path)
+        single_post_crud = re.search('/posts/[\w]+/', request.path)
         unique_id = request.path.split('/')[2]
         if len(unique_id) != UUID_LENGTH:
             return HTTPResponse(status=404, reason='Inadequate unique_id length. '
@@ -182,7 +184,6 @@ class HTTPServer:
             response_body = json.dumps(info_found).encode('utf-8')
             headers = utils.form_headers(response_body)
             return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
-        return HTTPResponse(status=404, reason='No written entries yet')
 
     def retrieve_post(self, unique_id: str) -> HTTPResponse:
         post_found = self._executor.find(unique_id)
@@ -193,20 +194,19 @@ class HTTPServer:
         return HTTPResponse(status=404, reason='Entry not found')
 
     def update_post(self, request: HTTPRequest) -> HTTPResponse:
-        sent_info = json.loads(request.body.decode('utf-8'))
+        try:
+            sent_info = json.loads(request.body.decode('utf-8'))
+        except json.JSONDecodeError:
+            return HTTPResponse(status=400, reason='Bad Request')
         if not utils.info_is_valid(sent_info):
             return HTTPResponse(status=404, reason='Improper request body')
         update_performed = self._executor.update(sent_info)
-        if update_performed is None:
-            return HTTPResponse(status=404, reason='No written entries yet')
         if update_performed:
             return HTTPResponse(status=200, reason='Entry successfully updated')
         return HTTPResponse(status=404, reason='Entry not found')
 
     def delete_post(self, unique_id: str) -> HTTPResponse:
         deletion_performed = self._executor.delete(unique_id)
-        if deletion_performed is None:
-            return HTTPResponse(status=404, reason='No written entries yet')
         if deletion_performed:
             return HTTPResponse(status=204, reason='Entry deleted')
         return HTTPResponse(status=404, reason='Entry not found')
