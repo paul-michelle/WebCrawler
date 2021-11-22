@@ -5,7 +5,8 @@ out of parsed data in the parser-module, as well as dict to string and backwards
 to allow json-modification and data-validation in the webserver-module."""
 
 import re
-from typing import Optional, List
+from datetime import date
+from typing import Optional, List, Tuple, Union
 from typing import Dict
 from bs4 import BeautifulSoup
 
@@ -56,6 +57,10 @@ def dict_to_values_inline(decoded_request_body: Dict[str, str]) -> str:
         else '[DELETED]'
         for pattern_key in pattern_keys
     ) + '\n'
+
+
+def info_from_sql_db_to_dict(info: Tuple[Union[str, date]]) -> Dict:
+    return dict(zip(pattern_keys, list(map(str, info))))
 
 
 def form_headers(response_body: bytes) -> List[tuple]:

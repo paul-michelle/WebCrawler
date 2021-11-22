@@ -1,7 +1,7 @@
 """Collect and keep temporarily parsed data.
 
 The module allows to append to a list, checking for duplicates, and keep parsed data
-to be later on manipulated by saver and webserver methods."""
+to be later on manipulated via webserver with corresponding executor tools."""
 
 from typing import List
 

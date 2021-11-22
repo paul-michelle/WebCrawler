@@ -1,9 +1,10 @@
 """Run a server on localhost.
 
 The module allows to work with the output file via simple RESTful API.
-The request sent to localhost are parsed by the webserver method. The crud-commands
-in the request are executed onto the output-file with the responses formed and
-sent back to the client."""
+The request sent to localhost are parsed by the webserver corresponding method.
+The crud-commands in the request are performed with an executor (txt, sql, nosql)
+with the responses formed and sent back to the client."""
+from uuid import UUID
 
 import utils
 import _io
@@ -11,7 +12,6 @@ import logging
 import email.message
 import re
 import socket
-import sys
 import json
 from typing import List, Optional, Callable, Union
 from email.parser import Parser as mail_parser
@@ -21,7 +21,6 @@ from collector import ValidDataCollector
 
 MAX_LINE_BINARY_LENGTH = 64 * 1024
 MAX_HEADERS_LINES = 50
-UUID_LENGTH = 32
 
 
 class HTTPRequest:
@@ -143,6 +142,12 @@ class HTTPServer:
         return mail_parser().parsestr(''.join(headers))
 
     def handle_http_request(self, request: HTTPRequest) -> Union[Callable, HTTPResponse]:
+        if self._collector.is_empty and request.method == 'POST':
+            return HTTPResponse(status=404, reason='All parsed data exhausted')
+
+        if request.path == '/posts/remaining/' and request.method == 'POST':
+            return self.write_remaining_posts()
+
         if request.path == '/posts/' and request.method == 'POST':
             return self.write_next_post()
 
@@ -152,26 +157,33 @@ class HTTPServer:
         if request.path == '/posts/' and request.method == 'GET':
             return self.retrieve_all_written_posts()
 
-        single_post_crud = re.search('/posts/[\w]+/', request.path)
+        single_post_crud = re.search('/posts/[\w-]+/', request.path)
         unique_id = request.path.split('/')[2]
-        if len(unique_id) != UUID_LENGTH:
-            return HTTPResponse(status=404, reason='Inadequate unique_id length. '
-                                                   '32 chars expected')
+        try:
+            UUID(unique_id)
+        except ValueError:
+            return HTTPResponse(status=404, reason='Inadequate unique_id')
 
         if single_post_crud and request.method == 'GET':
             return self.retrieve_post(unique_id)
 
         if single_post_crud and request.method == 'PUT':
-            return self.update_post(request)
+            return self.update_post(request, unique_id)
 
         if single_post_crud and request.method == 'DELETE':
             return self.delete_post(unique_id)
 
         return HTTPResponse(status=404, reason='Not found')
 
+    def write_remaining_posts(self) -> HTTPResponse:
+        posts_to_append = self._collector.data
+        unique_ids = self._executor.insert(posts_to_append)
+        response_body = b', '.join(json.dumps({'unique_id': f'{unique_id}'}).encode('utf-8')
+                                   for unique_id in unique_ids)
+        headers = utils.form_headers(response_body)
+        return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
+
     def write_next_post(self) -> HTTPResponse:
-        if self._collector.is_empty:
-            return HTTPResponse(status=404, reason='All parsed data exhausted')
         post_to_append = self._collector.get_one_entry()
         unique_id = self._executor.insert(post_to_append)
         response_body = json.dumps({'unique_id': f'{unique_id}'}).encode('utf-8')
@@ -193,14 +205,14 @@ class HTTPServer:
             return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
         return HTTPResponse(status=404, reason='Entry not found')
 
-    def update_post(self, request: HTTPRequest) -> HTTPResponse:
+    def update_post(self, request: HTTPRequest, unique_id: str) -> HTTPResponse:
         try:
             sent_info = json.loads(request.body.decode('utf-8'))
         except json.JSONDecodeError:
             return HTTPResponse(status=400, reason='Bad Request')
         if not utils.info_is_valid(sent_info):
             return HTTPResponse(status=404, reason='Improper request body')
-        update_performed = self._executor.update(sent_info)
+        update_performed = self._executor.update(sent_info, unique_id)
         if update_performed:
             return HTTPResponse(status=200, reason='Entry successfully updated')
         return HTTPResponse(status=404, reason='Entry not found')
@@ -224,25 +236,3 @@ class HTTPServer:
             if response.body_sent:
                 file_to_write.write(response.body_sent)
             file_to_write.flush()
-
-
-# class HTTPServerFeatMongo(HTTPServer):
-#
-#     def __init__(self, executor, host: str, port: int, server_name: str,
-#                  collector=ValidDataCollector(settings.POSTS_FOR_PARSING_NUM)):
-#         super().__init__(host=host, port=port, server_name=server_name, collector=collector, executor=executor)
-#
-#
-# inst = HTTPServerFeatMongo(host='123', port=13, server_name='qwerty', executor=123)
-# print(inst.__dict__)
-# print(inst._port)
-
-if __name__ == '__main__':
-    host = sys.argv[1]
-    port = int(sys.argv[2])
-    server_name = sys.argv[3]
-    server = HTTPServer(host, port, server_name)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print('Connection has been voluntarily interrupted')

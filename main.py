@@ -2,20 +2,28 @@
 
 Set the argparser to read the commandline optional arguments, tune the logging this
 the needed threshold (INFO by default). Instantiate the currently needed operating tools:
-loader, parser, collector and webserver. Instantiate a manager that gives all the necessary
+loader, parser, collector , executor, and webserver. Instantiate a manager that gives all the necessary
 instructions via its comprehensive run method."""
 
 import logging
 import os
 import asyncio
+from enum import Enum
 from time import time
 from datetime import datetime
 from argparser import argparser
 from loader import Loader
 from collector import ValidDataCollector
 from txt_executor import TxtExecutor
+from sql_executor import SQLExecutor
 from webserver import HTTPServer
 from manager import Manager
+
+
+class ExecutorType(Enum):
+    TXT = TxtExecutor
+    SQL = SQLExecutor
+
 
 if __name__ == '__main__':
     args = argparser.parse_args()
@@ -28,7 +36,7 @@ if __name__ == '__main__':
 
     current_loader = Loader(webdriver_path=args.chromedriver_path, page_to_scrape=args.url)
     current_collector = ValidDataCollector(posts_for_parsing_num=args.number)
-    current_executor = TxtExecutor(target_dir_path=args.target_dir_path)
+    current_executor = ExecutorType.SQL()
     current_server = HTTPServer(host=args.host, port=args.port, server_name=args.server,
                                 executor=current_executor, collector=current_collector)
 

@@ -1,8 +1,8 @@
 """Executor of CRUD operations upon to a txt instance.
 
 The module gives methods to check if a previous output txt-file exists and
-remove this file (when txt-executor is being instantiated), as well as
-to touch a new file and perform CRUD upon it."""
+remove this file (when being instantiated), as well as to touch a new file
+and perform CRUD upon it."""
 
 import logging
 import os
@@ -65,13 +65,13 @@ class TxtExecutor(BaseCrudExecutor, TxtInstanceManager):
             if line.startswith(unique_id):
                 return utils.inline_values_to_dict(line)
 
-    def update(self, data: Dict[str, Any]) -> Optional[bool]:
+    def update(self, data: Dict[str, Any], unique_id: str) -> Optional[bool]:
         update_performed = False
         with open(self.path_to_new_file, 'r+') as f:
             already_written_lines = f.readlines()
             f.seek(0)
             for line in already_written_lines:
-                if line.startswith(data['unique_id']):
+                if line.startswith(unique_id):
                     line = utils.dict_to_values_inline(data)
                     update_performed = True
                 f.write(line)

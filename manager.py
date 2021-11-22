@@ -1,7 +1,7 @@
 """Order the instructions.
 
 The module helps manage the methods supplied by the main operating modules:
-loader -> parser -> collector -> saver & webserver."""
+loader -> parser -> collector -> webserver feat executor."""
 
 import logging
 import asyncio
