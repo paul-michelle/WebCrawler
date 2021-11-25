@@ -1,3 +1,4 @@
+import logging
 import psycopg2
 import utils
 from collections import namedtuple
@@ -81,21 +82,21 @@ class QueryBuilder:
         return f"""WITH upd_to_users AS
         (
         UPDATE users SET
-        user_name  = '{data["user_name"]}',
-        comment_karma = '{data["comment_karma"]}',
-        post_karma = '{data["post_karma"]}',
-        total_karma = '{data["total_karma"]}',
-        user_cakeday = '{data["user_cakeday"]}'
+        user_name = '{data.get("user_name", "")}',
+        comment_karma = '{data.get("comment_karma", "")}',
+        post_karma = '{data.get("post_karma", "")}',
+        total_karma = '{data.get("total_karma", "")}',
+        user_cakeday = '{data.get("user_cakeday", "")}'
         WHERE user_name IN 
         (SELECT user_name FROM posts
         WHERE unique_id = '{unique_id}')
         )
         UPDATE posts SET
-        unique_id  = '{data["unique_id"]}',
-        post_url = '{data["post_url"]}',
-        post_date = '{data["post_date"]}',
-        post_category = '{data["post_category"]}',
-        comments_number = '{data["comments_number"]}'
+        post_url = '{data.get("post_url", "")}',
+        post_date = '{data.get("post_date", "")}',
+        post_category = '{data.get("post_category", "")}',
+        comments_number = '{data.get("comments_number", "")}',
+        votes_number = '{data.get("votes_number", "")}'
         WHERE unique_id = '{unique_id}'
         RETURNING unique_id
         ;"""
@@ -143,7 +144,7 @@ class SQLConnector(metaclass=Singleton):
         try:
             self._connection = psycopg2.connect(**self._credentials)
         except (Exception, psycopg2.DatabaseError) as e:
-            print(e)
+            logging.error(e)
 
     def _close_connection(self):
         if self._connection:
@@ -173,6 +174,7 @@ class SQLExecutor(BaseCrudExecutor):
 
     def _do(self, queries: List[str], fetch=False, multiple=False) -> None:
         with self._connection, self._connection.cursor as cur:
+            self._execution_results.clear()
             for query in queries:
                 try:
                     cur.execute(query)
@@ -182,7 +184,7 @@ class SQLExecutor(BaseCrudExecutor):
                         self._execution_results = cur.fetchall()
                 except (Exception, psycopg2.ProgrammingError) as e:
                     self._execution_success = False
-                    print(f'Exception occurred --> {e}.')
+                    logging.warning(f'Warning from Postgres. Exception occurred --> {e}.')
                     continue
 
     def _drop_outdated_tables(self) -> None:
@@ -195,11 +197,10 @@ class SQLExecutor(BaseCrudExecutor):
 
     def insert(self, collected_data: Union[str, List[str]]) -> Union[str, List[str]]:
         if isinstance(collected_data, List):
-            posts_as_dicts = [utils.inline_values_to_dict(post) for post in collected_data]
+            posts_as_dicts = [utils.inline_values_to_dict(line) for line in collected_data]
             queries = [self._query_builder.insert_to_users_and_posts(post) for post in posts_as_dicts]
             self._do(queries, multiple=True)
-            if self._execution_success:
-                return self._execution_results
+            return self._execution_results
         post_as_dict = utils.inline_values_to_dict(collected_data)
         query = self._query_builder.insert_to_users_and_posts(post_as_dict)
         self._do([query], fetch=True)
@@ -221,17 +222,14 @@ class SQLExecutor(BaseCrudExecutor):
         return bool(self._execution_results)
 
     def delete(self, unique_id: str) -> Optional[bool]:
-        deletion_of_post_made = False
+        deletion_success = False
         posts_query = self._query_builder.delete_from_posts(unique_id)
         self._do([posts_query], fetch=True)
         if len(self._execution_results):
-            deletion_of_post_made = True
+            deletion_success = True
             user_posts_number = self._execution_results[0][1]
             if user_posts_number == 1:
                 user_name = self._execution_results[0][0]
                 users_query = self._query_builder.delete_from_users(user_name)
                 self._do([users_query])
-        return deletion_of_post_made
-
-
-executor = SQLExecutor()
+        return deletion_success

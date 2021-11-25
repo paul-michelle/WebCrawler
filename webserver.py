@@ -4,7 +4,6 @@ The module allows to work with the output file via simple RESTful API.
 The request sent to localhost are parsed by the webserver corresponding method.
 The crud-commands in the request are performed with an executor (txt, sql, nosql)
 with the responses formed and sent back to the client."""
-from uuid import UUID
 
 import utils
 import _io
@@ -13,6 +12,8 @@ import email.message
 import re
 import socket
 import json
+from datetime import datetime
+from uuid import UUID
 from typing import List, Optional, Callable, Union
 from email.parser import Parser as mail_parser
 from urllib.parse import urlparse
@@ -162,7 +163,7 @@ class HTTPServer:
         try:
             UUID(unique_id)
         except ValueError:
-            return HTTPResponse(status=404, reason='Inadequate unique_id')
+            return HTTPResponse(status=404, reason='Inadequate unique_id in uri')
 
         if single_post_crud and request.method == 'GET':
             return self.retrieve_post(unique_id)
@@ -181,6 +182,8 @@ class HTTPServer:
         response_body = b', '.join(json.dumps({'unique_id': f'{unique_id}'}).encode('utf-8')
                                    for unique_id in unique_ids)
         headers = utils.form_headers(response_body)
+        self._collector.clear()
+        logging.info(f'All remaining data taken out of collector and saved --- {datetime.now()}')
         return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
 
     def write_next_post(self) -> HTTPResponse:
@@ -191,9 +194,9 @@ class HTTPServer:
         return HTTPResponse(status=201, reason='Created', headers=headers, body=response_body)
 
     def retrieve_all_written_posts(self) -> HTTPResponse:
-        info_found = self._executor.find()
-        if info_found:
-            response_body = json.dumps(info_found).encode('utf-8')
+        posts_found = self._executor.find()
+        if posts_found:
+            response_body = json.dumps(posts_found).encode('utf-8')
             headers = utils.form_headers(response_body)
             return HTTPResponse(status=200, reason='OK', headers=headers, body=response_body)
 
@@ -210,12 +213,14 @@ class HTTPServer:
             sent_info = json.loads(request.body.decode('utf-8'))
         except json.JSONDecodeError:
             return HTTPResponse(status=400, reason='Bad Request')
-        if not utils.info_is_valid(sent_info):
+
+        if not utils.info_is_valid(sent_info, unique_id):
             return HTTPResponse(status=404, reason='Improper request body')
+
         update_performed = self._executor.update(sent_info, unique_id)
         if update_performed:
             return HTTPResponse(status=200, reason='Entry successfully updated')
-        return HTTPResponse(status=404, reason='Entry not found')
+        return HTTPResponse(status=404, reason='Update failure')
 
     def delete_post(self, unique_id: str) -> HTTPResponse:
         deletion_performed = self._executor.delete(unique_id)

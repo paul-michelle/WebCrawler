@@ -8,7 +8,6 @@ instructions via its comprehensive run method."""
 import logging
 import os
 import asyncio
-from enum import Enum
 from time import time
 from datetime import datetime
 from argparser import argparser
@@ -16,35 +15,44 @@ from loader import Loader
 from collector import ValidDataCollector
 from txt_executor import TxtExecutor
 from sql_executor import SQLExecutor
+from nosql_executor import MongoExecutor
 from webserver import HTTPServer
 from manager import Manager
 
 
-class ExecutorType(Enum):
-    TXT = TxtExecutor
-    SQL = SQLExecutor
+class ExecutorType:
+
+    @staticmethod
+    def txt(target_dir: str) -> TxtExecutor:
+        return TxtExecutor(target_dir)
+
+    @staticmethod
+    def sql() -> SQLExecutor:
+        return SQLExecutor()
+
+    @staticmethod
+    def nosql() -> MongoExecutor:
+        return MongoExecutor()
 
 
 if __name__ == '__main__':
     args = argparser.parse_args()
-
     logging.basicConfig(filename=f'{args.target_dir_path}{os.sep}reddit-scraper.log',
                         filemode='w', level=logging.INFO)
 
-    start_time = datetime.now()
-    logging.info(f'Reddit-scraper launched --- {start_time}')
+    current_executor = ExecutorType().nosql()
 
     current_loader = Loader(webdriver_path=args.chromedriver_path, page_to_scrape=args.url)
     current_collector = ValidDataCollector(posts_for_parsing_num=args.number)
-    current_executor = ExecutorType.SQL()
     current_server = HTTPServer(host=args.host, port=args.port, server_name=args.server,
                                 executor=current_executor, collector=current_collector)
+    manager = Manager(loader=current_loader, collector=current_collector, server=current_server)
 
-    manager = Manager(loader=current_loader,
-                      collector=current_collector,
-                      server=current_server)
+    start_time = datetime.now()
+    logging.info(f'Reddit-scraper launched --- {start_time}. CRUD-executor: {current_executor}')
 
-    asyncio.run(manager.run())
-
-    logging.info(f'Program completed --- {datetime.now()}. '
-                 f'Duration: {time() - start_time.timestamp()} seconds.')
+    try:
+        asyncio.run(manager.run())
+    except KeyboardInterrupt:
+        logging.info(f'Program terminated --- {datetime.now()}. '
+                     f'Duration: {time() - start_time.timestamp()} seconds.')

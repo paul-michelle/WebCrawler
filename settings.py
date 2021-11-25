@@ -13,10 +13,11 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 WEBDRIVER_PATH = os.getenv("WEBDRIVER_PATH")
 TARGET_DIR_PATH = os.getenv("TARGET_DIR_PATH")
 PAGE_TO_SCRAPE = "https://www.reddit.com/top/?t=month"
-POSTS_FOR_PARSING_NUM = 5
+POSTS_FOR_PARSING_NUM = 500
+TOTAL_MAX_WAIT_TIME = 300
 
 HOST = 'localhost'
-PORT = 8089
+PORT = 8087
 SERVER_NAME = 'reddit-scraper'
 
 POSTGRES_HOST = os.getenv('POSTGRES_HOST')
@@ -24,3 +25,7 @@ POSTGRES_PORT = os.getenv('POSTGRES_PORT')
 POSTGRES_DATABASE = os.getenv('POSTGRES_DATABASE')
 POSTGRES_DB_USER = os.getenv('POSTGRES_DB_USER')
 POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
+
+MONGO_HOST = os.getenv("MONGO_HOST")
+MONGO_PORT = os.getenv("MONGO_PORT")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME")

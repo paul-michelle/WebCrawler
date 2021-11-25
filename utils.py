@@ -8,6 +8,8 @@ import re
 from datetime import date
 from typing import Optional, List, Tuple, Union
 from typing import Dict
+from uuid import UUID
+
 from bs4 import BeautifulSoup
 
 pattern_keys = ['unique_id', 'post_url', 'user_name', 'comment_karma', 'post_karma', 'total_karma',
@@ -44,7 +46,15 @@ def inline_values_to_dict(line: str) -> Dict:
     return dict(zip(pattern_keys, values))
 
 
-def info_is_valid(decoded_request_body: Dict[str, str]) -> bool:
+def info_is_valid(decoded_request_body: Dict[str, str], unique_id: str) -> bool:
+    try:
+        id_from_body = UUID(decoded_request_body.get("unique_id", ""))
+    except (ValueError, TypeError):
+        return False
+
+    if id_from_body != UUID(unique_id):
+        return False
+
     received_keys = decoded_request_body.keys()
     if len(received_keys) <= len(pattern_keys):
         return all(key in pattern_keys for key in received_keys)

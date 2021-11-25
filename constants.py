@@ -1,5 +1,12 @@
 """Keep reddit html tags and attribute actual for the time being."""
 
+PAGE_LAYOUT = {
+    "switch": "LayoutSwitch--picker",
+    "iframe": "iframe",
+    "menu": "//div[@role='menu']",
+    "buttons": "//button[@role='menuitem']"
+}
+
 POST_URL = {
     "elem": "a",
     "attrs": {"class": "_3jOxDPIQ0KaOWpzvSQo-1s"}

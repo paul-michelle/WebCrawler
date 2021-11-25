@@ -5,11 +5,16 @@ loader -> parser -> collector -> webserver feat executor."""
 
 import logging
 import asyncio
+import settings
+from datetime import datetime
+from time import time
 from typing import List
 from loader import Loader
 from parser import Parser
 from collector import ValidDataCollector
 from webserver import HTTPServer
+
+TOTAL_MAX_WAIT_TIME = settings.TOTAL_MAX_WAIT_TIME
 
 
 class Manager:
@@ -39,11 +44,24 @@ class Manager:
 
     async def run(self) -> None:
         with self._loader:
+
+            start_time = time()
+
             while not self._collector.is_full:
                 posts_to_parse = self.get_posts_to_parse()
                 parsing_results = await self.parse_posts(posts_to_parse)
                 self.collect_valid_info(parsing_results)
+                logging.info(f'{len(self._collector)} posts in collector')
+
+                time_spent = time() - start_time
+                if time_spent > TOTAL_MAX_WAIT_TIME:
+                    logging.warning(f'Maximum wait time threshold of '
+                                    f'{TOTAL_MAX_WAIT_TIME} exceeded.'
+                                    f'--- {datetime.now()}.')
+                    break
             logging.info(f'Collector is filled with valid parsed data. '
                          f'Collected info on {len(self._collector)}')
 
+        logging.info(f'Server is being launched. --- {datetime.now()}.')
         self.start_server()
+

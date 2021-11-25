@@ -22,6 +22,9 @@ class ValidDataCollector:
     def get_one_entry(self) -> str:
         return self.__valid_data.pop(0)
 
+    def clear(self) -> None:
+        self.__valid_data.clear()
+
     @property
     def data(self) -> List[str]:
         return self.__valid_data
