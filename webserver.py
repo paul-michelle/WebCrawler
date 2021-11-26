@@ -17,7 +17,7 @@ from uuid import UUID
 from typing import List, Optional, Callable, Union
 from email.parser import Parser as mail_parser
 from urllib.parse import urlparse
-from base_crud_executor import BaseCrudExecutor
+from crud_executors import base_crud_executor
 from collector import ValidDataCollector
 
 MAX_LINE_BINARY_LENGTH = 64 * 1024
@@ -77,7 +77,8 @@ class HTTPResponse:
 class HTTPServer:
 
     def __init__(self, host: str, port: int, server_name: str,
-                 executor: BaseCrudExecutor, collector: ValidDataCollector):
+                 executor: base_crud_executor.BaseCrudExecutor,
+                 collector: ValidDataCollector):
         self._host = host
         self._port = port
         self._server_name = server_name
@@ -114,7 +115,7 @@ class HTTPServer:
         host_specified = headers.get('Host')
         if host_specified in (self._server_name, f'{self._server_name}:{self._port}'):
             return HTTPRequest(method, target, http_version, headers, file_to_read)
-        raise Exception('Bad request. Improper or missing "Host" header')
+        logging.error('Bad request. Improper or missing "Host" header')
 
     @staticmethod
     def parse_request_line(file_to_read: _io.BufferedReader) -> List[str]:
@@ -143,6 +144,9 @@ class HTTPServer:
         return mail_parser().parsestr(''.join(headers))
 
     def handle_http_request(self, request: HTTPRequest) -> Union[Callable, HTTPResponse]:
+        if not request:
+            return HTTPResponse(status=400, reason='Bad Request')
+
         if self._collector.is_empty and request.method == 'POST':
             return HTTPResponse(status=404, reason='All parsed data exhausted')
 

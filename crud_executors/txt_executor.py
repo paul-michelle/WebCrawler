@@ -10,7 +10,7 @@ import re
 import utils
 from datetime import datetime
 from typing import List, Optional, Union, Dict, Any
-from base_crud_executor import BaseCrudExecutor
+from .base_crud_executor import BaseCrudExecutor
 
 
 class TxtInstanceManager:

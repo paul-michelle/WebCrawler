@@ -1,14 +1,22 @@
+"""PostgreSQL CRUD-executor.
+
+Methods of PostreSQL-executor use those of
+SQL-QueryBuilder to form specific queries to database
+and send back info to the Webserver.
+"""
+import datetime
 import logging
-import psycopg2
+import settings
 import utils
+import psycopg2
 from collections import namedtuple
-from typing import List, Dict, Union, Any, Optional
-from base_crud_executor import BaseCrudExecutor
-from settings import *
+from typing import List, Dict, Union, Any, Tuple
+from .base_crud_executor import BaseCrudExecutor
+from .singleton_connector import Singleton
 
 Credentials = namedtuple('Credentials', ['host', 'port', 'database', 'user', 'password'])
-PSQL_CREDENTIALS = Credentials(POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE,
-                               POSTGRES_DB_USER, POSTGRES_PASSWORD)
+PSQL_CREDENTIALS = Credentials(settings.POSTGRES_HOST, settings.POSTGRES_PORT, settings.POSTGRES_DATABASE,
+                               settings.POSTGRES_DB_USER, settings.POSTGRES_PASSWORD)
 
 
 class QueryBuilder:
@@ -119,15 +127,6 @@ class QueryBuilder:
         """
 
 
-class Singleton(type):
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
-
-
 class SQLConnector(metaclass=Singleton):
 
     def __init__(self, credentials: namedtuple = PSQL_CREDENTIALS):
@@ -156,7 +155,7 @@ class SQLConnector(metaclass=Singleton):
         return self._connection.cursor()
 
 
-class SQLExecutor(BaseCrudExecutor):
+class PostgreSQLExecutor(BaseCrudExecutor):
 
     def __init__(self, connection: psycopg2._ext.connection = SQLConnector(), query_builder=QueryBuilder()):
         self._connection = connection
@@ -172,7 +171,8 @@ class SQLExecutor(BaseCrudExecutor):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._connection.cursor().close()
 
-    def _do(self, queries: List[str], fetch=False, multiple=False) -> None:
+    def _do(self, queries: List[str], fetch=False, multiple=False) \
+            -> Union[None, List[str], List[Tuple[str]], List[Tuple[str, datetime.date]]]:
         with self._connection, self._connection.cursor as cur:
             self._execution_results.clear()
             for query in queries:
@@ -186,6 +186,7 @@ class SQLExecutor(BaseCrudExecutor):
                     self._execution_success = False
                     logging.warning(f'Warning from Postgres. Exception occurred --> {e}.')
                     continue
+            return self._execution_results
 
     def _drop_outdated_tables(self) -> None:
         query = self._query_builder.drop_tables()
@@ -196,40 +197,40 @@ class SQLExecutor(BaseCrudExecutor):
         self._do([query])
 
     def insert(self, collected_data: Union[str, List[str]]) -> Union[str, List[str]]:
-        if isinstance(collected_data, List):
-            posts_as_dicts = [utils.inline_values_to_dict(line) for line in collected_data]
-            queries = [self._query_builder.insert_to_users_and_posts(post) for post in posts_as_dicts]
-            self._do(queries, multiple=True)
-            return self._execution_results
-        post_as_dict = utils.inline_values_to_dict(collected_data)
-        query = self._query_builder.insert_to_users_and_posts(post_as_dict)
-        self._do([query], fetch=True)
-        if self._execution_success:
-            unique_id = self._execution_results[0][0]
-            return unique_id
+        if isinstance(collected_data, str):
+            collected_data = [collected_data]
+        posts_as_dicts = [utils.inline_values_to_dict(line) for line in collected_data]
+        queries = [self._query_builder.insert_to_users_and_posts(post) for post in posts_as_dicts]
+        self._do(queries, multiple=True)
+        inserted_ids = self._execution_results
+        if len(inserted_ids) == 1:
+            return inserted_ids[0]
+        return inserted_ids
 
     def find(self, unique_id: str = None) -> Union[Dict[str, Any], List[Dict[str, Any]], None]:
         query = self._query_builder.retrieve_from_posts_and_users(unique_id)
-        self._do([query], fetch=True)
-        if len(self._execution_results):
-            formatted_results = [utils.info_from_sql_db_to_dict(result)
-                                 for result in self._execution_results]
+        results = self._do([query], fetch=True)
+        if len(results):
+            print(f"find ---> {results}")
+            formatted_results = [utils.info_from_sql_db_to_dict(result) for result in results]
             return formatted_results
 
-    def update(self, data: Dict[str, str], unique_id: str) -> Optional[bool]:
+    def update(self, data: Dict[str, str], unique_id: str) -> bool:
         upd_query = self._query_builder.update_users_and_posts(data, unique_id)
-        self._do([upd_query], fetch=True)
-        return bool(self._execution_results)
+        results = self._do([upd_query], fetch=True)
+        print(f"UPD ---> {results}")
+        return bool(results)
 
-    def delete(self, unique_id: str) -> Optional[bool]:
+    def delete(self, unique_id: str) -> bool:
         deletion_success = False
         posts_query = self._query_builder.delete_from_posts(unique_id)
-        self._do([posts_query], fetch=True)
-        if len(self._execution_results):
+        results = self._do([posts_query], fetch=True)
+        if len(results):
+            print(f"DELETION ---> {results}")
             deletion_success = True
-            user_posts_number = self._execution_results[0][1]
+            user_posts_number = results[0][1]
             if user_posts_number == 1:
-                user_name = self._execution_results[0][0]
+                user_name = results[0][0]
                 users_query = self._query_builder.delete_from_users(user_name)
                 self._do([users_query])
         return deletion_success

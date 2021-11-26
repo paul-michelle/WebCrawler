@@ -4,6 +4,7 @@ import argparse
 import settings
 
 argparser = argparse.ArgumentParser()
+
 argparser.add_argument(
     '--chromedriver-path',
     type=str,
@@ -40,11 +41,67 @@ argparser.add_argument(
     '--port',
     type=int,
     default=settings.PORT,
-    help='number of port to launch webserver on'
+    help='number of port to listen for webserver'
 )
 argparser.add_argument(
     '--server',
     type=str,
     default=settings.SERVER_NAME,
     help='name of the webserver running on the given address'
+)
+
+argparser.add_argument(
+    '--postgres-host',
+    type=str,
+    default=settings.POSTGRES_HOST,
+    help='postgresql server address'
+)
+
+argparser.add_argument(
+    '--postgres-port',
+    type=int,
+    default=settings.POSTGRES_PORT,
+    help='number of port postgres is listening on'
+)
+
+argparser.add_argument(
+    '--postgres-db',
+    type=str,
+    default=settings.POSTGRES_DATABASE,
+    help='postgres database name'
+)
+
+argparser.add_argument(
+    '--postgres-user',
+    type=str,
+    default=settings.POSTGRES_DB_USER,
+    help='postgres database username'
+)
+
+argparser.add_argument(
+    '--postgres-pass',
+    type=str,
+    default=settings.POSTGRES_PASSWORD,
+    help='postgres database password'
+)
+
+argparser.add_argument(
+    '--mongo-host',
+    type=str,
+    default=settings.MONGO_HOST,
+    help='mongoDB instance address'
+)
+
+argparser.add_argument(
+    '--mongo-port',
+    type=int,
+    default=settings.MONGO_PORT,
+    help='number of port mondoDB is listening on'
+)
+
+argparser.add_argument(
+    '--mongo-db',
+    type=str,
+    default=settings.MONGO_DB_NAME,
+    help='mongoDB database name'
 )

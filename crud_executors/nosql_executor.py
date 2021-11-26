@@ -1,23 +1,23 @@
-import pymongo.errors
+"""MongoDB CRUD-executor.
+
+Methods of MongoDB-executor use those of
+NoSQL-QueryBuilder to form specific CRUD queries to mongo
+instance and send back info to the Webserver.
+"""
+import logging
+
 import settings
 import utils
+import pymongo.errors
 from pymongo import MongoClient
+from .singleton_connector import Singleton
+from .base_crud_executor import BaseCrudExecutor
 from typing import Union, List, Dict, Callable, Optional
-from base_crud_executor import BaseCrudExecutor
 
 MONGO_HOST = settings.MONGO_HOST
 MONGO_PORT = int(settings.MONGO_PORT)
 MONGO_DB_NAME = settings.MONGO_DB_NAME
 MAX_CONNECTION_WAIT = 200
-
-
-class Singleton(type):
-    _instances = {}
-
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
 
 
 class MongoConnector(metaclass=Singleton):
@@ -162,7 +162,6 @@ class MongoExecutor(BaseCrudExecutor):
 
     def __init__(self):
         self._drop_tables()
-        self._results = None
         self._query_builder = None
 
     @ClientSessionDecorator
@@ -175,43 +174,35 @@ class MongoExecutor(BaseCrudExecutor):
     def insert(self, collected_info: Union[str, List[str]],
                posts_collection: pymongo.collection.Collection,
                users_collection: pymongo.collection.Collection) -> Union[str, List[str]]:
+        if isinstance(collected_info, str):
+            collected_info = [collected_info]
+        posts_as_dicts = [utils.inline_values_to_dict(line) for line in collected_info]
 
-        if isinstance(collected_info, List):
-            posts_as_dicts = [utils.inline_values_to_dict(line) for line in collected_info]
-            users_queries = [self._query_builder.insert_to_users(post) for post in posts_as_dicts]
-            try:
-                self._results = users_collection.insert_many(users_queries)
-                user_ids = self._results.inserted_ids
-                posts_queries = [self._query_builder.insert_to_posts(post, user_id)
-                                 for post, user_id in zip(posts_as_dicts, user_ids)]
-                self._results = posts_collection.insert_many(posts_queries)
-            except (pymongo.errors.DuplicateKeyError, pymongo.errors.PyMongoError) as e:
-                print(e)
-            return self._results is not None and self._results.inserted_ids
+        users_queries = [self._query_builder.insert_to_users(post) for post in posts_as_dicts]
+        insertions_to_users_results = users_collection.insert_many(users_queries)
+        user_ids = insertions_to_users_results.inserted_ids
 
-        post_as_dict = utils.inline_values_to_dict(collected_info)
-        users_query = self._query_builder.insert_to_users(post_as_dict)
-        try:
-            self._results = users_collection.insert_one(users_query)
-            user_id = self._results.inserted_id
-            posts_query = self._query_builder.insert_to_posts(post_as_dict, user_id)
-            self._results = posts_collection.insert_one(posts_query)
-        except (pymongo.errors.DuplicateKeyError, pymongo.errors.PyMongoError) as e:
-            print(e)
-        return self._results is not None and self._results.inserted_id
+        posts_queries = [self._query_builder.insert_to_posts(post, user_id)
+                         for post, user_id in zip(posts_as_dicts, user_ids)]
+        insertions_to_posts_results = posts_collection.insert_many(posts_queries)
+        inserted_ids = insertions_to_posts_results.inserted_ids
+
+        if len(inserted_ids) == 1:
+            return inserted_ids[0]
+        return inserted_ids
 
     @ClientSessionDecorator
     def find(self, unique_id: Optional[str] = None,
              posts_collection: pymongo.collection.Collection = None) \
             -> Union[Dict[str, str], List[Dict[str, str]], None]:
         if unique_id:
-            self._results = posts_collection.aggregate(pipeline=self._query_builder.retrieve(unique_id))
+            search_results = posts_collection.aggregate(pipeline=self._query_builder.retrieve(unique_id))
             try:
-                return list(self._results)[0]
+                return list(search_results)[0]
             except IndexError:
                 return
-        self._results = posts_collection.aggregate(pipeline=self._query_builder.retrieve())
-        return list(self._results)
+        search_results = posts_collection.aggregate(pipeline=self._query_builder.retrieve())
+        return list(search_results)
 
     @ClientSessionDecorator
     def update(self, new_doc: Dict[str, str], unique_id: str,
@@ -223,11 +214,11 @@ class MongoExecutor(BaseCrudExecutor):
             try:
                 users_upd_info = self._query_builder.insert_to_users(new_doc)
                 posts_upd_info = self._query_builder.insert_to_posts(new_doc, user_id, upd=True)
-                self._results = posts_collection.update_one(*self._query_builder.upd(unique_id, posts_upd_info))
+                posts_collection.update_one(*self._query_builder.upd(unique_id, posts_upd_info))
                 users_collection.update_one(*self._query_builder.upd(user_id, users_upd_info))
                 upd_result = True
             except (KeyError, pymongo.errors.DuplicateKeyError, pymongo.errors.PyMongoError) as e:
-                print(e)
+                logging.error(f'Error from MongoDB ---> {e}')
         return upd_result
 
     @ClientSessionDecorator
@@ -237,7 +228,7 @@ class MongoExecutor(BaseCrudExecutor):
         deletion_result = False
         user_id = self._check_entry_exists(unique_id, posts_collection)
         if user_id:
-            self._results = posts_collection.delete_one(self._query_builder.find_by_id(unique_id))
+            posts_collection.delete_one(self._query_builder.find_by_id(unique_id))
             users_collection.delete_one(self._query_builder.find_by_id(user_id))
             deletion_result = True
         return deletion_result

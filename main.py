@@ -13,26 +13,26 @@ from datetime import datetime
 from argparser import argparser
 from loader import Loader
 from collector import ValidDataCollector
-from txt_executor import TxtExecutor
-from sql_executor import SQLExecutor
-from nosql_executor import MongoExecutor
 from webserver import HTTPServer
 from manager import Manager
+from crud_executors import (
+    base_crud_executor, sql_executor, nosql_executor, txt_executor
+)
 
 
 class ExecutorType:
 
     @staticmethod
-    def txt(target_dir: str) -> TxtExecutor:
-        return TxtExecutor(target_dir)
+    def txt(target_dir: str) -> base_crud_executor.BaseCrudExecutor:
+        return txt_executor.TxtExecutor(target_dir)
 
     @staticmethod
-    def sql() -> SQLExecutor:
-        return SQLExecutor()
+    def sql() -> base_crud_executor.BaseCrudExecutor:
+        return sql_executor.PostgreSQLExecutor()
 
     @staticmethod
-    def nosql() -> MongoExecutor:
-        return MongoExecutor()
+    def nosql() -> base_crud_executor.BaseCrudExecutor:
+        return nosql_executor.MongoExecutor()
 
 
 if __name__ == '__main__':

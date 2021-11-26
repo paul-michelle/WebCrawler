@@ -1,3 +1,10 @@
+"""Absctract Base Class for all executors.
+
+Ensure all the CRUD methods are properly implemented.
+All the existing executors and those to be optionally added
+in future should subclass from BaseCrudExecutor.
+"""
+
 from abc import ABC, abstractmethod
 from typing import Optional, Union, Any, Dict, List
 

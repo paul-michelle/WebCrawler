@@ -6,4 +6,3 @@ chromedriver
 reddit-*.txt
 reddit-*.log
 output_files/
-http-server-module.py
