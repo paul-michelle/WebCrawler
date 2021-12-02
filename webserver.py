@@ -4,8 +4,7 @@ The module allows to work with the output file via simple RESTful API.
 The request sent to localhost are parsed by the webserver corresponding method.
 The crud-commands in the request are performed with an executor (txt, sql, nosql)
 with the responses formed and sent back to the client."""
-
-
+import selectors
 import time
 import utils
 import _io
@@ -88,8 +87,8 @@ class HTTPServer:
         self._executor = executor
         self._collector = collector
         self._server_socket = None
+        self._selector = selectors.DefaultSelector()
         self._set_server_socket()
-        self._sockets_to_monitor = []
 
     def _set_server_socket(self) -> None:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
@@ -98,29 +97,32 @@ class HTTPServer:
         self._server_socket.setblocking(False)
         self._server_socket.listen()
 
-    def _accept_client(self) -> socket.socket:
-        client_socket, _ = self._server_socket.accept()
-        return client_socket
+        self._selector.register(fileobj=self._server_socket,
+                                events=selectors.EVENT_READ,
+                                data=self._accept_client)
+
+    def _accept_client(self, server_socket: socket.socket) -> None  :
+        client_socket, _ = server_socket.accept()
+
+        self._selector.register(fileobj=client_socket,
+                                events=selectors.EVENT_READ,
+                                data=self._serve_client)
 
     def _serve_client(self, client_socket: socket.socket) -> None:
         request = self.form_http_request(client_socket)
         if request:
             response = self.handle_http_request(request)
             self.send_response(client_socket, response)
+        self._selector.unregister(client_socket)
         client_socket.close()
 
     def run_event_loop(self):
-        self._sockets_to_monitor.append(self._server_socket)
-
         while True:
-            ready_for_reading_sockets, _, _ = select(self._sockets_to_monitor, [], [])
-            for socket_ in ready_for_reading_sockets:
-                if socket_ is self._server_socket:
-                    client_socket = self._accept_client()
-                    self._sockets_to_monitor.append(client_socket)
-                    continue
-                self._serve_client(socket_)
-                self._sockets_to_monitor.remove(socket_)
+            keys_and_events = self._selector.select()
+            for key, _ in keys_and_events:
+                callback = key.data
+                obj = key.fileobj
+                callback(obj)
 
     def form_http_request(self, connection_established: socket.socket) -> Optional[HTTPRequest]:
         file_to_read = connection_established.makefile('rb')
