@@ -20,7 +20,7 @@ MONGO_DB_NAME = settings.MONGO_DB_NAME
 MAX_CONNECTION_WAIT = 200
 
 
-class MongoConnector(metaclass=Singleton):
+class MongoConnector():
 
     def __init__(self, host: str = MONGO_HOST, port: int = MONGO_PORT):
         self._host = host
@@ -32,7 +32,7 @@ class MongoConnector(metaclass=Singleton):
         try:
             self._client = MongoClient(host=MONGO_HOST, port=MONGO_PORT, connectTimeoutMS=MAX_CONNECTION_WAIT)
         except (Exception, pymongo.errors.ConnectionFailure) as e:
-            print(e)
+            logging.error(f'Warning from MongoDB. Exception occurred --> {e}.')
         return self._client
 
 

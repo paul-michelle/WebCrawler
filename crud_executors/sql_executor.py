@@ -160,7 +160,6 @@ class PostgreSQLExecutor(BaseCrudExecutor):
     def __init__(self, connection: psycopg2._ext.connection = SQLConnector(), query_builder=QueryBuilder()):
         self._connection = connection
         self._query_builder = query_builder
-        self._execution_success = True
         self._execution_results = []
         self._drop_outdated_tables()
         self._create_new_tables()
@@ -183,8 +182,7 @@ class PostgreSQLExecutor(BaseCrudExecutor):
                     if fetch:
                         self._execution_results = cur.fetchall()
                 except (Exception, psycopg2.ProgrammingError) as e:
-                    self._execution_success = False
-                    logging.warning(f'Warning from Postgres. Exception occurred --> {e}.')
+                    logging.error(f'Warning from Postgres. Exception occurred --> {e}.')
                     continue
             return self._execution_results
 
@@ -211,14 +209,12 @@ class PostgreSQLExecutor(BaseCrudExecutor):
         query = self._query_builder.retrieve_from_posts_and_users(unique_id)
         results = self._do([query], fetch=True)
         if len(results):
-            print(f"find ---> {results}")
             formatted_results = [utils.info_from_sql_db_to_dict(result) for result in results]
             return formatted_results
 
     def update(self, data: Dict[str, str], unique_id: str) -> bool:
         upd_query = self._query_builder.update_users_and_posts(data, unique_id)
         results = self._do([upd_query], fetch=True)
-        print(f"UPD ---> {results}")
         return bool(results)
 
     def delete(self, unique_id: str) -> bool:
@@ -226,7 +222,6 @@ class PostgreSQLExecutor(BaseCrudExecutor):
         posts_query = self._query_builder.delete_from_posts(unique_id)
         results = self._do([posts_query], fetch=True)
         if len(results):
-            print(f"DELETION ---> {results}")
             deletion_success = True
             user_posts_number = results[0][1]
             if user_posts_number == 1:

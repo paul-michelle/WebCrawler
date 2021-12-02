@@ -13,10 +13,10 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 WEBDRIVER_PATH = os.getenv("WEBDRIVER_PATH")
 TARGET_DIR_PATH = os.getenv("TARGET_DIR_PATH")
 PAGE_TO_SCRAPE = "https://www.reddit.com/top/?t=month"
-POSTS_FOR_PARSING_NUM = 100
+POSTS_FOR_PARSING_NUM = 5
 TOTAL_MAX_WAIT_TIME = 300
 
-HOST = 'localhost'
+HOST = '127.0.0.1'
 PORT = 8087
 SERVER_NAME = 'reddit-scraper'
 

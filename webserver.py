@@ -5,6 +5,8 @@ The request sent to localhost are parsed by the webserver corresponding method.
 The crud-commands in the request are performed with an executor (txt, sql, nosql)
 with the responses formed and sent back to the client."""
 
+
+import time
 import utils
 import _io
 import logging
@@ -12,6 +14,7 @@ import email.message
 import re
 import socket
 import json
+from select import select
 from datetime import datetime
 from uuid import UUID
 from typing import List, Optional, Callable, Union
@@ -84,29 +87,40 @@ class HTTPServer:
         self._server_name = server_name
         self._executor = executor
         self._collector = collector
+        self._server_socket = None
+        self._set_server_socket()
+        self._sockets_to_monitor = []
 
-    def serve_forever(self) -> None:
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
-        try:
-            server_socket.bind((self._host, self._port))
-            server_socket.listen()
+    def _set_server_socket(self) -> None:
+        self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
+        self._server_socket.bind((self._host, self._port))
+        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._server_socket.setblocking(False)
+        self._server_socket.listen()
 
-            while True:
-                connection_established, _ = server_socket.accept()
-                try:
-                    self.serve_client(connection_established)
-                except Exception as e:
-                    logging.error('Client serving failed:', e)
+    def _accept_client(self) -> socket.socket:
+        client_socket, _ = self._server_socket.accept()
+        return client_socket
 
-        finally:
-            server_socket.close()
+    def _serve_client(self, client_socket: socket.socket) -> None:
+        request = self.form_http_request(client_socket)
+        if request:
+            response = self.handle_http_request(request)
+            self.send_response(client_socket, response)
+        client_socket.close()
 
-    def serve_client(self, connection_established: socket.socket) -> None:
-        request = self.form_http_request(connection_established)
-        response = self.handle_http_request(request)
-        self.send_response(connection_established, response)
-        if connection_established:
-            connection_established.close()
+    def run_event_loop(self):
+        self._sockets_to_monitor.append(self._server_socket)
+
+        while True:
+            ready_for_reading_sockets, _, _ = select(self._sockets_to_monitor, [], [])
+            for socket_ in ready_for_reading_sockets:
+                if socket_ is self._server_socket:
+                    client_socket = self._accept_client()
+                    self._sockets_to_monitor.append(client_socket)
+                    continue
+                self._serve_client(socket_)
+                self._sockets_to_monitor.remove(socket_)
 
     def form_http_request(self, connection_established: socket.socket) -> Optional[HTTPRequest]:
         file_to_read = connection_established.makefile('rb')
@@ -154,6 +168,7 @@ class HTTPServer:
             return self.write_remaining_posts()
 
         if request.path == '/posts/' and request.method == 'POST':
+            time.sleep(15)
             return self.write_next_post()
 
         if self._collector.is_full:

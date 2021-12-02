@@ -38,7 +38,7 @@ class Manager:
 
     def start_server(self):
         try:
-            self._server.serve_forever()
+            self._server.run_event_loop()
         except KeyboardInterrupt:
             logging.info('Server stopped with KeyBoard')
 
