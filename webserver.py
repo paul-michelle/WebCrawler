@@ -6,6 +6,8 @@ The crud-commands in the request are performed with an executor (txt, sql, nosql
 with the responses formed and sent back to the client."""
 import selectors
 import time
+from collections import deque
+
 import utils
 import _io
 import logging
@@ -88,41 +90,57 @@ class HTTPServer:
         self._collector = collector
         self._server_socket = None
         self._selector = selectors.DefaultSelector()
-        self._set_server_socket()
+        self._tasks = deque()
+        self._tasks.append(self._start_serving())
+        self._to_read = {}
+        self._to_write = {}
 
-    def _set_server_socket(self) -> None:
+    def _start_serving(self) -> None:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
         self._server_socket.bind((self._host, self._port))
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.setblocking(False)
         self._server_socket.listen()
 
-        self._selector.register(fileobj=self._server_socket,
-                                events=selectors.EVENT_READ,
-                                data=self._accept_client)
-
-    def _accept_client(self, server_socket: socket.socket) -> None  :
-        client_socket, _ = server_socket.accept()
-
-        self._selector.register(fileobj=client_socket,
-                                events=selectors.EVENT_READ,
-                                data=self._serve_client)
+        while True:
+            yield 'read', self._server_socket
+            client_socket, _ = self._server_socket.accept()
+            self._tasks.append(self._serve_client(client_socket))
 
     def _serve_client(self, client_socket: socket.socket) -> None:
-        request = self.form_http_request(client_socket)
-        if request:
-            response = self.handle_http_request(request)
-            self.send_response(client_socket, response)
-        self._selector.unregister(client_socket)
-        client_socket.close()
+        while True:
+            yield 'read', client_socket
+            request = self.form_http_request(client_socket)
+            if request:
+                response = self.handle_http_request(request)
+                yield 'write', client_socket
+                self.send_response(client_socket, response)
+                client_socket.close()
+                continue
+            client_socket.close()
+            break
 
     def run_event_loop(self):
-        while True:
-            keys_and_events = self._selector.select()
-            for key, _ in keys_and_events:
-                callback = key.data
-                obj = key.fileobj
-                callback(obj)
+
+        while any([self._tasks, self._to_read, self._to_write]):
+
+            while not self._tasks:
+                ready_to_read, ready_to_write, _ = select(self._to_read, self._to_write, [])
+                for sock in ready_to_read:
+                    self._tasks.append(self._to_read.pop(sock))
+                for sock in ready_to_write:
+                    self._tasks.append(self._to_write.pop(sock))
+
+            try:
+                task = self._tasks.popleft()
+                reason, sock = next(task)
+                if reason == 'read':
+                    self._to_read[sock] = task
+                if reason == 'write':
+                    self._to_write[sock] = task
+
+            except StopIteration:
+                pass
 
     def form_http_request(self, connection_established: socket.socket) -> Optional[HTTPRequest]:
         file_to_read = connection_established.makefile('rb')
