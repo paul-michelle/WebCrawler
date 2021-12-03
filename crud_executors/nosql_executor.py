@@ -20,7 +20,7 @@ MONGO_DB_NAME = settings.MONGO_DB_NAME
 MAX_CONNECTION_WAIT = 200
 
 
-class MongoConnector():
+class MongoConnector(metaclass=Singleton):
 
     def __init__(self, host: str = MONGO_HOST, port: int = MONGO_PORT):
         self._host = host

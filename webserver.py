@@ -6,8 +6,6 @@ The crud-commands in the request are performed with an executor (txt, sql, nosql
 with the responses formed and sent back to the client."""
 import selectors
 import time
-from collections import deque
-
 import utils
 import _io
 import logging
@@ -15,6 +13,7 @@ import email.message
 import re
 import socket
 import json
+from collections import deque
 from select import select
 from datetime import datetime
 from uuid import UUID
