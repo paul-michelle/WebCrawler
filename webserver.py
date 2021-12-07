@@ -4,8 +4,8 @@ The module allows to work with the output file via simple RESTful API.
 The request sent to localhost are parsed by the webserver corresponding method.
 The crud-commands in the request are performed with an executor (txt, sql, nosql)
 with the responses formed and sent back to the client."""
+
 import selectors
-import time
 import utils
 import _io
 import logging
@@ -187,7 +187,6 @@ class HTTPServer:
             return self.write_remaining_posts()
 
         if request.path == '/posts/' and request.method == 'POST':
-            time.sleep(15)
             return self.write_next_post()
 
         if self._collector.is_full:

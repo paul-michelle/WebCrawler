@@ -23,8 +23,7 @@ class QueryBuilder:
 
     @staticmethod
     def drop_tables() -> str:
-        return """DROP TABLE IF EXISTS posts;  
-        DROP TABLE IF EXISTS users;"""
+        return "DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS users;"
 
     @staticmethod
     def create_tables() -> str:
@@ -49,82 +48,78 @@ class QueryBuilder:
         );"""
 
     @staticmethod
-    def insert_to_users_and_posts(post_as_dict: Dict[str, str]) -> str:
-        return f"""WITH ins_to_users AS 
-        (INSERT INTO users VALUES (
-        '{post_as_dict["user_name"]}',
-        '{post_as_dict["comment_karma"]}',
-        '{post_as_dict["post_karma"]}',
-        '{post_as_dict["total_karma"]}',
-        '{post_as_dict["user_cakeday"]}'
-        )
-        ON CONFLICT (user_name)
-        DO NOTHING)
-        INSERT INTO posts VALUES (
-        '{post_as_dict["unique_id"]}',
-        '{post_as_dict["post_url"]}',
-        '{post_as_dict["post_date"]}',
-        '{post_as_dict["post_category"]}',
-        '{post_as_dict["comments_number"]}',
-        '{post_as_dict["votes_number"]}',
-        '{post_as_dict["user_name"]}'
-        )
-        RETURNING unique_id
-        ;
-        """
+    def insert_to_users_and_posts(post_as_dict: Dict[str, str], unique_id_given: str = '') \
+            -> Tuple[str, Dict[str, str]]:
+
+        unique_id = post_as_dict.get("unique_id")
+        post_url = post_as_dict.get("post_url", "")
+        post_date = post_as_dict.get("post_date")
+        post_category = post_as_dict.get("post_category", "")
+        comments_number = post_as_dict.get("comments_number", "")
+        votes_number = post_as_dict.get("votes_number", "")
+        user_name = post_as_dict.get("user_name", "")
+        comment_karma = post_as_dict.get("comment_karma", "")
+        post_karma = post_as_dict.get("post_karma", "")
+        total_karma = post_as_dict.get("total_karma", "")
+        user_cakeday = post_as_dict.get("user_cakeday")
+
+        query_parameters = {'user_name': user_name, 'comment_karma': comment_karma, 'post_karma': post_karma,
+                            'total_karma': total_karma, 'user_cakeday': user_cakeday, 'unique_id': unique_id,
+                            'post_url': post_url, 'post_date': post_date, 'post_category': post_category,
+                            'comments_number': comments_number, 'votes_number': votes_number
+                            }
+
+        update_operation = unique_id_given
+        if update_operation:
+            return f"""WITH upd_to_users AS
+            (
+            UPDATE users SET
+            user_name = %(user_name)s,
+            comment_karma = %(comment_karma)s,
+            post_karma = %(post_karma)s,
+            total_karma = %(total_karma)s,
+            user_cakeday = %(user_cakeday)s
+            WHERE user_name IN  
+            (SELECT user_name FROM posts
+            WHERE unique_id = '{unique_id_given}')
+            )
+            UPDATE posts SET
+            post_url = %(post_url)s,
+            post_date = %(post_date)s,
+            post_category = %(post_category)s,
+            comments_number = %(comments_number)s,
+            votes_number = %(votes_number)s
+            WHERE unique_id = '{unique_id_given}'
+            RETURNING unique_id
+            ;""", query_parameters
+
+        return """WITH ins_to_users AS 
+        (INSERT INTO users VALUES (%(user_name)s, %(comment_karma)s, %(post_karma)s,
+        %(total_karma)s, %(user_cakeday)s) ON CONFLICT (user_name) DO NOTHING)
+        INSERT INTO posts VALUES (%(unique_id)s, %(post_url)s, %(post_date)s, %(post_category)s,
+        %(comments_number)s, %(votes_number)s, %(user_name)s) RETURNING unique_id;
+        """, query_parameters
 
     @staticmethod
     def retrieve_from_posts_and_users(unique_id: str = None) -> str:
         general_query = """SELECT 
             posts.unique_id, posts.post_url, posts.user_name, users.comment_karma, users.post_karma, users.total_karma,
             users.user_cakeday, posts.post_date, posts.comments_number, posts.votes_number, posts.post_category
-            FROM posts 
-            NATURAL JOIN users
+            FROM posts NATURAL JOIN users
             """
         if unique_id:
             return f"{general_query} WHERE unique_id = '{unique_id}';"
         return f"{general_query} ORDER BY unique_id;"
 
     @staticmethod
-    def update_users_and_posts(data: Dict[str, str], unique_id: str) -> str:
-        return f"""WITH upd_to_users AS
-        (
-        UPDATE users SET
-        user_name = '{data.get("user_name", "")}',
-        comment_karma = '{data.get("comment_karma", "")}',
-        post_karma = '{data.get("post_karma", "")}',
-        total_karma = '{data.get("total_karma", "")}',
-        user_cakeday = '{data.get("user_cakeday", "")}'
-        WHERE user_name IN 
-        (SELECT user_name FROM posts
-        WHERE unique_id = '{unique_id}')
-        )
-        UPDATE posts SET
-        post_url = '{data.get("post_url", "")}',
-        post_date = '{data.get("post_date", "")}',
-        post_category = '{data.get("post_category", "")}',
-        comments_number = '{data.get("comments_number", "")}',
-        votes_number = '{data.get("votes_number", "")}'
-        WHERE unique_id = '{unique_id}'
-        RETURNING unique_id
-        ;"""
-
-    @staticmethod
     def delete_from_posts(unique_id: str) -> str:
-        return f"""WITH deleted_post_info AS 
-        (DELETE FROM posts * WHERE unique_id = '{unique_id}' RETURNING user_name) 
-        SELECT user_name, count(*) FROM posts 
-        WHERE user_name = (SELECT user_name FROM deleted_post_info)
-        GROUP BY user_name
-        ;
-        """
+        return f"""WITH deleted_post_info AS (DELETE FROM posts * WHERE unique_id = '{unique_id}' RETURNING user_name) 
+        SELECT user_name, count(*) FROM posts WHERE user_name = (SELECT user_name FROM deleted_post_info)
+        GROUP BY user_name;"""
 
     @staticmethod
     def delete_from_users(user_name: str) -> str:
-        return f"""DELETE FROM users *
-        WHERE user_name = '{user_name}'
-        ;
-        """
+        return f"DELETE FROM users * WHERE user_name = '{user_name}';"
 
 
 class SQLConnector(metaclass=Singleton):
@@ -170,19 +165,22 @@ class PostgreSQLExecutor(BaseCrudExecutor):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._connection.cursor().close()
 
-    def _do(self, queries: List[str], fetch=False, multiple=False) \
+    def _do(self, queries: List[Union[str, Tuple[str, Dict[str, str]]]], fetch=False, multiple=False) \
             -> Union[None, List[str], List[Tuple[str]], List[Tuple[str, datetime.date]]]:
         with self._connection, self._connection.cursor as cur:
             self._execution_results.clear()
             for query in queries:
                 try:
-                    cur.execute(query)
+                    if isinstance(query, Tuple):
+                        cur.execute(*query)
+                    if isinstance(query, str):
+                        cur.execute(query)
                     if multiple:
                         self._execution_results.append(cur.fetchone()[0])
                     if fetch:
                         self._execution_results = cur.fetchall()
                 except (Exception, psycopg2.ProgrammingError) as e:
-                    logging.error(f'Warning from Postgres. Exception occurred --> {e}.')
+                    logging.error(f'Exception occurred --> {e}.')
                     continue
             return self._execution_results
 
@@ -213,7 +211,7 @@ class PostgreSQLExecutor(BaseCrudExecutor):
             return formatted_results
 
     def update(self, data: Dict[str, str], unique_id: str) -> bool:
-        upd_query = self._query_builder.update_users_and_posts(data, unique_id)
+        upd_query = self._query_builder.insert_to_users_and_posts(data, unique_id)
         results = self._do([upd_query], fetch=True)
         return bool(results)
 

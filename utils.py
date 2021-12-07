@@ -6,7 +6,7 @@ to allow json-modification and data-validation in the webserver-module."""
 
 import re
 from datetime import date
-from typing import Optional, List, Tuple, Union
+from typing import Optional, List, Tuple, Union, Any
 from typing import Dict
 from uuid import UUID
 
@@ -46,7 +46,10 @@ def inline_values_to_dict(line: str) -> Dict:
     return dict(zip(pattern_keys, values))
 
 
-def info_is_valid(decoded_request_body: Dict[str, str], unique_id: str) -> bool:
+def info_is_valid(decoded_request_body: Union[Dict[str, str], Any], unique_id: str) -> bool:
+    if not isinstance(decoded_request_body, Dict):
+        return False
+
     try:
         id_from_body = UUID(decoded_request_body.get("unique_id", ""))
     except (ValueError, TypeError):
@@ -58,6 +61,7 @@ def info_is_valid(decoded_request_body: Dict[str, str], unique_id: str) -> bool:
     received_keys = decoded_request_body.keys()
     if len(received_keys) <= len(pattern_keys):
         return all(key in pattern_keys for key in received_keys)
+
     return False
 
 
