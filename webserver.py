@@ -1,11 +1,11 @@
 """Run a server on localhost.
 
-The module allows to work with the output file via simple RESTful API.
+The module allows working with the output file via simple RESTful API.
 The request sent to localhost are parsed by the webserver corresponding method.
 The crud-commands in the request are performed with an executor (txt, sql, nosql)
 with the responses formed and sent back to the client."""
 
-import selectors
+import asyncio
 import utils
 import _io
 import logging
@@ -14,7 +14,6 @@ import re
 import socket
 import json
 from collections import deque
-from select import select
 from datetime import datetime
 from uuid import UUID
 from typing import List, Optional, Callable, Union
@@ -88,58 +87,32 @@ class HTTPServer:
         self._executor = executor
         self._collector = collector
         self._server_socket = None
-        self._selector = selectors.DefaultSelector()
+        self._set_server_socket()
         self._tasks = deque()
-        self._tasks.append(self._start_serving())
-        self._to_read = {}
-        self._to_write = {}
 
-    def _start_serving(self) -> None:
+    def _set_server_socket(self) -> None:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
         self._server_socket.bind((self._host, self._port))
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._server_socket.setblocking(False)
         self._server_socket.listen()
 
+    def _accept_client(self) -> None:
+        client_socket, _ = self._server_socket.accept()
+        self._tasks.append(asyncio.create_task(self._serve_client(client_socket)))
+        print(f'task_created:: socket {client_socket}')
+
+    async def _serve_client(self, client_socket: socket.socket) -> None:
+        request = self.form_http_request(client_socket)
+        if request:
+            response = await self.handle_http_request(request)
+            self.send_response(client_socket, response)
+        client_socket.close()
+
+    async def serve_forever(self):
         while True:
-            yield 'read', self._server_socket
-            client_socket, _ = self._server_socket.accept()
-            self._tasks.append(self._serve_client(client_socket))
-
-    def _serve_client(self, client_socket: socket.socket) -> None:
-        while True:
-            yield 'read', client_socket
-            request = self.form_http_request(client_socket)
-            if request:
-                response = self.handle_http_request(request)
-                yield 'write', client_socket
-                self.send_response(client_socket, response)
-                client_socket.close()
-                continue
-            client_socket.close()
-            break
-
-    def run_event_loop(self):
-
-        while any([self._tasks, self._to_read, self._to_write]):
-
-            while not self._tasks:
-                ready_to_read, ready_to_write, _ = select(self._to_read, self._to_write, [])
-                for sock in ready_to_read:
-                    self._tasks.append(self._to_read.pop(sock))
-                for sock in ready_to_write:
-                    self._tasks.append(self._to_write.pop(sock))
-
-            try:
-                task = self._tasks.popleft()
-                reason, sock = next(task)
-                if reason == 'read':
-                    self._to_read[sock] = task
-                if reason == 'write':
-                    self._to_write[sock] = task
-
-            except StopIteration:
-                pass
+            self._accept_client()
+            print(self._tasks)
+            await asyncio.gather(*self._tasks)
 
     def form_http_request(self, connection_established: socket.socket) -> Optional[HTTPRequest]:
         file_to_read = connection_established.makefile('rb')
@@ -176,7 +149,7 @@ class HTTPServer:
                 raise Exception(f'Max headers lines number exceeded. Limit is {MAX_HEADERS_LINES}')
         return mail_parser().parsestr(''.join(headers))
 
-    def handle_http_request(self, request: HTTPRequest) -> Union[Callable, HTTPResponse]:
+    async def handle_http_request(self, request: HTTPRequest) -> Union[Callable, HTTPResponse]:
         if not request:
             return HTTPResponse(status=400, reason='Bad Request')
 
@@ -187,6 +160,7 @@ class HTTPServer:
             return self.write_remaining_posts()
 
         if request.path == '/posts/' and request.method == 'POST':
+            await asyncio.sleep(10)
             return self.write_next_post()
 
         if self._collector.is_full:

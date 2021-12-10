@@ -40,7 +40,7 @@ if __name__ == '__main__':
     logging.basicConfig(filename=f'{args.target_dir_path}{os.sep}reddit-scraper.log',
                         filemode='w', level=logging.INFO)
 
-    current_executor = ExecutorType().sql()
+    current_executor = ExecutorType().nosql()
 
     current_loader = Loader(webdriver_path=args.chromedriver_path, page_to_scrape=args.url)
     current_collector = ValidDataCollector(posts_for_parsing_num=args.number)

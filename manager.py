@@ -36,9 +36,9 @@ class Manager:
         for result in results:
             self._collector.collect(result)
 
-    def start_server(self):
+    async def start_server(self):
         try:
-            self._server.run_event_loop()
+            await self._server.serve_forever()
         except KeyboardInterrupt:
             logging.info('Server stopped with KeyBoard')
 
@@ -63,5 +63,5 @@ class Manager:
                          f'Collected info on {len(self._collector)}')
 
         logging.info(f'Server is being launched. --- {datetime.now()}.')
-        self.start_server()
+        await self.start_server()
 
