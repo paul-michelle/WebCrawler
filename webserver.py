@@ -5,19 +5,17 @@ The request sent to localhost are parsed by the webserver corresponding method.
 The crud-commands in the request are performed with an executor (txt, sql, nosql)
 with the responses formed and sent back to the client."""
 
+import io
 import time
 import collections
 import heapq
 import select
-import asyncio
 import utils
-import _io
 import logging
 import email.message
 import re
 import socket
 import json
-from collections import deque
 from datetime import datetime
 from uuid import UUID
 from typing import List, Any, Coroutine, Union, Callable, Optional
@@ -26,13 +24,14 @@ from urllib.parse import urlparse
 from crud_executors import base_crud_executor
 from collector import ValidDataCollector
 
+MAX_BYTES = 10_000
 MAX_LINE_BINARY_LENGTH = 64 * 1024
 MAX_HEADERS_LINES = 50
 
 
 class HTTPRequest:
     def __init__(self, method: str, target: str, http_version: str,
-                 headers: email.message.Message, file_to_read: _io.BufferedReader):
+                 headers: email.message.Message, file_to_read: io.BytesIO):
         self._method = method
         self._target = target
         self._version = http_version
@@ -92,7 +91,6 @@ class HTTPServer:
         self._collector = collector
         self._server_socket = None
         self._set_server_socket()
-        self._tasks = deque()
 
     def _set_server_socket(self) -> None:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
@@ -111,41 +109,26 @@ class HTTPServer:
 
     async def _serve_client(self, client_socket: socket.socket) -> None:
         while True:
-            request = await self.form_http_request(client_socket)
-            if request:
-                response = await self.handle_http_request(request)
-                self.send_response(client_socket, response)
-            client_socket.close()
+            data = await scheduler.recv(client_socket)
+            if not data:
+                break
+            http_request = self.form_http_request(io.BytesIO(data))
+            http_response = await self.handle_http_request(http_request)
+            data_to_send = self.get_data_to_send(http_response)
+            await scheduler.send(client_socket, data_to_send)
 
-    # async def echo_handler(client_socket):
-    #     while True:
-    #         data = await scheduler.recv(client_socket, 10000)
-    #         if not data:
-    #             break
-    #         await scheduler.send(
-    #             client_socket,
-    #             b'Got: ' + data
-    #         )
-    #     print('Connection closed')
-    #     client_socket.close()
+        client_socket.close()
 
-    # async def serve_forever(self):
-    #     while True:
-    #         self._accept_client()
-    #         print(self._tasks)
-    #         await asyncio.gather(*self._tasks)
-
-    async def form_http_request(self, connection_established: socket.socket) -> Optional[HTTPRequest]:
-        file_to_read = connection_established.makefile('rb')
-        method, target, http_version = self.parse_request_line(file_to_read)
-        headers = self.parse_headers_block(file_to_read)
+    def form_http_request(self, data: io.BytesIO) -> Optional[HTTPRequest]:
+        method, target, http_version = self.parse_request_line(data)
+        headers = self.parse_headers_block(data)
         host_specified = headers.get('Host')
         if host_specified in (self._server_name, f'{self._server_name}:{self._port}'):
-            return HTTPRequest(method, target, http_version, headers, file_to_read)
+            return HTTPRequest(method, target, http_version, headers, data)
         logging.error('Bad request. Improper or missing "Host" header')
 
     @staticmethod
-    def parse_request_line(file_to_read: _io.BufferedReader) -> List[str]:
+    def parse_request_line(file_to_read: io.BytesIO) -> List[str]:
         first_raw_bytes_line = file_to_read.readline(MAX_LINE_BINARY_LENGTH + 1)
         if len(first_raw_bytes_line) > MAX_LINE_BINARY_LENGTH:
             raise Exception('The request line length exceeded')
@@ -156,7 +139,7 @@ class HTTPServer:
         return words_in_request_line
 
     @staticmethod
-    def parse_headers_block(file_to_read: _io.BufferedReader) -> email.message.Message:
+    def parse_headers_block(file_to_read: io.BytesIO) -> email.message.Message:
         headers = []
         while True:
             next_raw_bytes_line = file_to_read.readline(MAX_LINE_BINARY_LENGTH + 1)
@@ -181,7 +164,7 @@ class HTTPServer:
             return self.write_remaining_posts()
 
         if request.path == '/posts/' and request.method == 'POST':
-            await asyncio.sleep(10)
+            await scheduler.sleep(10)
             return self.write_next_post()
 
         if self._collector.is_full:
@@ -261,21 +244,18 @@ class HTTPServer:
         return HTTPResponse(status=404, reason='Entry not found')
 
     @staticmethod
-    def send_response(connection_established: socket.socket, response: HTTPResponse) -> None:
-        with connection_established.makefile('wb') as file_to_write:
-            status_line = f'HTTP/1.1 {response.status} {response.reason}\r\n'.encode('iso-8859-1')
-            file_to_write.write(status_line)
-            if response.headers_sent:
-                for (key, value) in response.headers_sent:
-                    header_line = f'{key}: {value}\r\n'.encode('iso-8859-1')
-                    file_to_write.write(header_line)
-            file_to_write.write(b'\r\n')
-            if response.body_sent:
-                file_to_write.write(response.body_sent)
-            file_to_write.flush()
-
-
-SLEEP_TIME = .5
+    def get_data_to_send(response: HTTPResponse) -> bytes:
+        data_to_send = b''
+        status_line = f'HTTP/1.1 {response.status} {response.reason}\r\n'.encode('iso-8859-1')
+        data_to_send += status_line
+        if response.headers_sent:
+            for (key, value) in response.headers_sent:
+                header_line = f'{key}: {value}\r\n'.encode('iso-8859-1')
+                data_to_send += header_line
+        data_to_send += b'\r\n'
+        if response.body_sent:
+            data_to_send += response.body_sent
+        return data_to_send
 
 
 class QueueClosed(Exception):
@@ -352,13 +332,11 @@ class Scheduler:
                 for file_descriptor in can_write:
                     self._tasks_ready.append(self._write_waiting.pop(file_descriptor))
 
-                # Check for sleeping
                 now = time.time()
                 while self._tasks_delayed:
                     if now < self._tasks_delayed[0][0]:
                         break
                     self._tasks_ready.append(heapq.heappop(self._tasks_delayed)[2])
-                self._tasks_ready.append(task)
 
             while self._tasks_ready:
                 task = self._tasks_ready.popleft()
@@ -371,11 +349,21 @@ class Scheduler:
     def switch() -> Awaitable:
         return Awaitable()
 
-    async def recv(self, sock, max_bytes):
+    async def sleep(self, delay):
+        print(f'Sleeping {delay} sec. for single post write operation,'
+              f'not blocking the server')
+        self.call_soon(
+            func=self._current,
+            delayed=delay
+        )
+        self._current = None
+        await self.switch()
+
+    async def recv(self, sock: socket.socket):
         self.read_wait(sock, self._current)
         self._current = None
         await self.switch()
-        return sock.recv(max_bytes)
+        return sock.recv(MAX_BYTES)
 
     async def send(self, sock, data):
         self.write_wait(sock, self._current)
