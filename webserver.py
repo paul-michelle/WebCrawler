@@ -5,6 +5,10 @@ The request sent to localhost are parsed by the webserver corresponding method.
 The crud-commands in the request are performed with an executor (txt, sql, nosql)
 with the responses formed and sent back to the client."""
 
+import time
+import collections
+import heapq
+import select
 import asyncio
 import utils
 import _io
@@ -16,7 +20,7 @@ import json
 from collections import deque
 from datetime import datetime
 from uuid import UUID
-from typing import List, Optional, Callable, Union
+from typing import List, Any, Coroutine, Union, Callable, Optional
 from email.parser import Parser as mail_parser
 from urllib.parse import urlparse
 from crud_executors import base_crud_executor
@@ -94,27 +98,44 @@ class HTTPServer:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, proto=0)
         self._server_socket.bind((self._host, self._port))
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._server_socket.listen()
+        self._server_socket.listen(1)
 
-    def _accept_client(self) -> None:
-        client_socket, _ = self._server_socket.accept()
-        self._tasks.append(asyncio.create_task(self._serve_client(client_socket)))
-        print(f'task_created:: socket {client_socket}')
+    def run_forever(self):
+        scheduler.add_task(self._accept_client())
+        scheduler.run()
+
+    async def _accept_client(self) -> None:
+        while True:
+            client_socket, _ = await scheduler.accept(self._server_socket)
+            scheduler.add_task(self._serve_client(client_socket))
 
     async def _serve_client(self, client_socket: socket.socket) -> None:
-        request = self.form_http_request(client_socket)
-        if request:
-            response = await self.handle_http_request(request)
-            self.send_response(client_socket, response)
-        client_socket.close()
-
-    async def serve_forever(self):
         while True:
-            self._accept_client()
-            print(self._tasks)
-            await asyncio.gather(*self._tasks)
+            request = await self.form_http_request(client_socket)
+            if request:
+                response = await self.handle_http_request(request)
+                self.send_response(client_socket, response)
+            client_socket.close()
 
-    def form_http_request(self, connection_established: socket.socket) -> Optional[HTTPRequest]:
+    # async def echo_handler(client_socket):
+    #     while True:
+    #         data = await scheduler.recv(client_socket, 10000)
+    #         if not data:
+    #             break
+    #         await scheduler.send(
+    #             client_socket,
+    #             b'Got: ' + data
+    #         )
+    #     print('Connection closed')
+    #     client_socket.close()
+
+    # async def serve_forever(self):
+    #     while True:
+    #         self._accept_client()
+    #         print(self._tasks)
+    #         await asyncio.gather(*self._tasks)
+
+    async def form_http_request(self, connection_established: socket.socket) -> Optional[HTTPRequest]:
         file_to_read = connection_established.makefile('rb')
         method, target, http_version = self.parse_request_line(file_to_read)
         headers = self.parse_headers_block(file_to_read)
@@ -252,3 +273,137 @@ class HTTPServer:
             if response.body_sent:
                 file_to_write.write(response.body_sent)
             file_to_write.flush()
+
+
+SLEEP_TIME = .5
+
+
+class QueueClosed(Exception):
+    pass
+
+
+class Awaitable:
+    def __await__(self):
+        yield
+
+
+class Scheduler:
+
+    def __init__(self):
+        self._tasks_ready = collections.deque()
+        self._tasks_delayed = []
+        self._sequence = 0
+        self._current = None
+        self._read_waiting = {}
+        self._write_waiting = {}
+
+    def set_current(self, task: Optional['Task']) -> None:
+        self._current = task
+
+    def get_current(self) -> Optional['Task']:
+        return self._current
+
+    def add_to_tasks_ready(self, task: 'Task') -> None:
+        self._tasks_ready.append(task)
+
+    def call_soon(self, func: Callable[[...], Any], delayed: Union[int, float] = 0) -> None:
+        ready = not bool(delayed)
+        if delayed:
+            self._sequence += 1
+            deadline = time.time() + delayed
+            heapq.heappush(
+                self._tasks_delayed,
+                (deadline, self._sequence, func)
+            )
+        if ready:
+            self._tasks_ready.append(func)
+
+    def read_wait(self, fileno, func):
+        self._read_waiting[fileno] = func
+
+    def write_wait(self, fileno, func):
+        self._write_waiting[fileno] = func
+
+    def run(self) -> None:
+
+        while (
+                self._tasks_ready
+                or self._tasks_delayed
+                or self._read_waiting
+                or self._write_waiting
+        ):
+
+            if not self._tasks_ready:
+                if self._tasks_delayed:
+                    deadline, _, task = self._tasks_delayed[0]
+                    timeout = deadline - time.time()
+                    if timeout < 0:
+                        timeout = 0
+                if not self._tasks_delayed:
+                    timeout = None
+                can_read, can_write, _ = select.select(
+                    self._read_waiting,
+                    self._write_waiting,
+                    [],
+                    timeout
+                )
+                for file_descriptor in can_read:
+                    self._tasks_ready.append(self._read_waiting.pop(file_descriptor))
+                for file_descriptor in can_write:
+                    self._tasks_ready.append(self._write_waiting.pop(file_descriptor))
+
+                # Check for sleeping
+                now = time.time()
+                while self._tasks_delayed:
+                    if now < self._tasks_delayed[0][0]:
+                        break
+                    self._tasks_ready.append(heapq.heappop(self._tasks_delayed)[2])
+                self._tasks_ready.append(task)
+
+            while self._tasks_ready:
+                task = self._tasks_ready.popleft()
+                task()
+
+    def add_task(self, coro: Coroutine[Any, Any, Any]) -> None:
+        self._tasks_ready.append(Task(coro))
+
+    @staticmethod
+    def switch() -> Awaitable:
+        return Awaitable()
+
+    async def recv(self, sock, max_bytes):
+        self.read_wait(sock, self._current)
+        self._current = None
+        await self.switch()
+        return sock.recv(max_bytes)
+
+    async def send(self, sock, data):
+        self.write_wait(sock, self._current)
+        self._current = None
+        await self.switch()
+        return sock.send(data)
+
+    async def accept(self, sock):
+        self.read_wait(sock, self._current)
+        self._current = None
+        await self.switch()
+        return sock.accept()
+
+
+scheduler = Scheduler()
+
+
+class Task:
+
+    def __init__(self, coro: Coroutine[Any, Any, Any]):
+        self._coro = coro
+
+    def __call__(self):
+        try:
+            scheduler.set_current(self)
+            self._coro.send(None)
+            if scheduler.get_current():
+                scheduler.add_to_tasks_ready(self)
+
+        except (StopIteration,):
+            pass

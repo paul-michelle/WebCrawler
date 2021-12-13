@@ -38,7 +38,7 @@ class Manager:
 
     async def start_server(self):
         try:
-            await self._server.serve_forever()
+            self._server.run_forever()
         except KeyboardInterrupt:
             logging.info('Server stopped with KeyBoard')
 
